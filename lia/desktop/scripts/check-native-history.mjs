@@ -355,10 +355,10 @@ try {
   assert.equal(requests.at(-1).tools, undefined)
   assert.equal(requests.at(-1).messages.some(message => message.role === 'tool'), false)
   await page.getByText('Memória', { exact: true }).click()
-  const memoryNote = page.getByLabel('Nova nota', { exact: true })
-  const clearNotes = page.getByRole('button', { name: 'Apagar notas', exact: true })
-  assert.equal(await clearNotes.isDisabled(), true)
-  await memoryNote.fill('Nota sintética para exclusão.')
+  const memoryNote = () => page.getByLabel('Nova nota', { exact: true })
+  const clearNotes = () => page.getByRole('button', { name: 'Apagar notas', exact: true })
+  assert.equal(await clearNotes().isDisabled(), true)
+  await memoryNote().fill('Nota sintética para exclusão.')
   await page.getByRole('button', { name: 'Salvar nota', exact: true }).click()
   await page.getByText('Nota salva.', { exact: true }).waitFor()
   const answerToClear = response => app.evaluate(({ dialog }, choice) => {
@@ -369,14 +369,14 @@ try {
     }
   }, response)
   await answerToClear(0)
-  await clearNotes.click()
+  await clearNotes().click()
   await page.waitForFunction(() => document.activeElement?.id === 'memory-clear')
   await page.getByText('Nota sintética para exclusão.', { exact: true }).waitFor()
   await answerToClear(1)
-  await clearNotes.click()
+  await clearNotes().click()
   await page.getByText('Notas apagadas.', { exact: true }).waitFor()
   assert.equal(await page.getByText('Nota sintética para exclusão.', { exact: true }).count(), 0)
-  assert.equal(await clearNotes.isDisabled(), true)
+  assert.equal(await clearNotes().isDisabled(), true)
   await page.waitForFunction(() => document.activeElement?.id === 'memory-note')
   assert.equal(await page.getByText('Você: Mensagem sem ferramenta', { exact: true }).count(), 1)
   await page.screenshot({ path: join(root, 'memory-cleared.png'), fullPage: true })
@@ -396,11 +396,61 @@ try {
   await page.getByText('Mensagem apagada.', { exact: true }).waitFor()
   assert.equal(await page.getByText('Você: Mensagem sem ferramenta', { exact: true }).count(), 0)
   assert.equal(await page.getByText(`Lia: Resposta ${requests.length}`, { exact: true }).count(), 1)
+  const notesOptIn = () => page.getByRole('checkbox', { name: 'Usar minhas notas' })
+  const saveFixtureNote = async (text, expiry = '') => {
+    await memoryNote().fill(text)
+    await page.getByLabel('Tipo de nota').selectOption('project')
+    await page.getByLabel('Classificação').selectOption('hypothesis')
+    await page.getByLabel('Recuperar até (data UTC, opcional)').fill(expiry)
+    await page.getByRole('button', { name: 'Salvar nota', exact: true }).click()
+    await page.getByText('Nota salva.', { exact: true }).waitFor()
+  }
+  await notesOptIn().check()
+  await page.getByText('Preferência salva.', { exact: true }).waitFor()
+  await saveFixtureNote('Observatório: usar filtro âmbar.')
+  await saveFixtureNote('Observatório: versão expirada.', '2000-01-01')
+  await app.close()
+  app = await launch()
+  page = await app.firstWindow()
+  page.setDefaultTimeout(10_000)
+  await page.getByText('Memória', { exact: true }).click()
+  await page.getByText('Observatório: usar filtro âmbar.', { exact: true }).waitFor()
+  assert.equal(await notesOptIn().isChecked(), true)
+  await submit(page, 'Qual filtro usar no Observatório?', requests.length + 1)
+  assert.match(requests.at(-1).messages.at(-1).content, /filtro âmbar/)
+  assert.doesNotMatch(requests.at(-1).messages[0].content, /filtro âmbar/)
+  assert.doesNotMatch(JSON.stringify(requests.at(-1)), /versão expirada/)
+  await page.getByRole('button', { name: 'Editar nota', exact: true }).first().click()
+  assert.equal(await memoryNote().inputValue(), 'Observatório: usar filtro âmbar.')
+  await saveFixtureNote('Observatório: usar filtro violeta.')
+  await submit(page, 'Reveja o filtro do Observatório?', requests.length + 1)
+  assert.match(requests.at(-1).messages.at(-1).content, /filtro violeta/)
+  assert.doesNotMatch(JSON.stringify(requests.at(-1)), /filtro âmbar/)
+  const exportPath = join(root, 'exported-memory.json')
+  await app.evaluate(({ dialog }, filePath) => {
+    dialog.showSaveDialog = async owner => {
+      if (!owner)
+        throw new Error('Missing export owner')
+      return { canceled: false, filePath }
+    }
+  }, exportPath)
+  await page.getByRole('button', { name: 'Exportar notas', exact: true }).click()
+  await page.getByText('Notas exportadas.', { exact: true }).waitFor()
+  const exported = JSON.parse(await readFile(exportPath, 'utf8'))
+  assert.equal(exported.entries.length, 2)
+  assert.equal(exported.entries[0].metadata.provenance, 'user')
+  assert.equal(exported.entries[0].metadata.classification, 'hypothesis')
+  await answerToClear(1)
+  await clearNotes().click()
+  await page.getByText('Notas apagadas.', { exact: true }).waitFor()
+  await submit(page, 'Ainda há notas do Observatório?', requests.length + 1)
+  assert.doesNotMatch(JSON.stringify(requests.at(-1)), /filtro violeta|versão expirada/)
   const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, legacyTextImported: true, cancellationPreservedHistory: true, cleared: true, clearDisabledWhenEmpty: true, rateLimitSanitized: true, refusedImageWithoutVision: true, conversationsIsolated: true, selectionRestored: true, deletionConfirmed: true, builtInPersonaInRequest: true, importedPersonaInRequest: true, importedPersonaRestored: true, personaContextIsolated: true, kokoroSelectedByLauncher: Boolean(kokoroVoice), kokoroVoice: kokoroVoice ?? (withVoice ? 'default' : null), localKokoroMutedPlayback: withVoice ? 'cancelled, retried, played and stopped' : null, autoPlay: withVoice ? 'opt-in, persisted, played, opted out' : null, customizedTraitsPersisted: true }
   report.localClockRoundTrip = true
   report.clockConfirmation = { dialogResponse: 'injected', deniedWithoutRequest: true, acceptedRoundTrip: true }
   report.identityStableWithImportedPersona = true
   report.singleMessageRemoved = { dialogResponse: 'injected', remainingReplyVisible: true }
+  report.memoryLifecycle = { reopened: true, lexicalRecall: true, expiredExcluded: true, edited: true, exported: true, deletionExcluded: true, dialogResponse: 'injected' }
   report.memoryClear = { dialogResponse: 'injected', cancelPreservedNote: true, clearPreservedConversation: true, focusRestored: true }
   report.hubCatalog = { source: withPublishedHub ? 'published Hub index' : 'synthetic index', listed: listedHubCapabilities }
   assert.ok(!JSON.stringify(requests).includes('fixture-only-private-prose'))

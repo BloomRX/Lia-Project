@@ -2,6 +2,7 @@ import type { LiaRuntimeService } from '../../../core/src/runtime/index.ts'
 import type { LiaMemoryMutation } from '../../../core/src/memory/contracts.ts'
 
 import { mkdirSync } from 'node:fs'
+import { writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -22,7 +23,7 @@ import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMe
 import { stageConversationChange, stageHistoryChange, stageHistoryGet, stageHistoryImport, stageHistoryRemoveMessage, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
 import { stagePersonaChange, stagePersonaGet } from '../shared/chat-ipc.ts'
 import { stagePresenceReadPackagedAvatar } from '../shared/chat-ipc.ts'
-import { stageHubCatalogGet } from '../shared/chat-ipc.ts'
+import { stageHubCatalogGet, stageMemoryExport } from '../shared/chat-ipc.ts'
 import { stageChatStopSpeech, stageVoiceAutoPlay } from '../shared/chat-ipc.ts'
 import { stageLocale, stageText } from '../shared/locale.ts'
 import { createStageChat } from './stage-chat.ts'
@@ -167,6 +168,32 @@ async function main(): Promise<void> {
   })
 
   ipcMain.handle(stageMemoryGet, event => authorized(event) ? memory.get() : { ok: false, code: 'invalid' })
+  let exportingMemory = false
+  ipcMain.handle(stageMemoryExport, async (event) => {
+    const owner = window
+    if (!owner || !authorized(event) || exportingMemory)
+      return { ok: false, code: 'unavailable' }
+    exportingMemory = true
+    try {
+      const locale = await readLocale()
+      if (!authorized(event))
+        return { ok: false, code: 'cancelled' }
+      const result = await dialog.showSaveDialog(owner, {
+        title: stageText(locale, 'Exportar notas'),
+        defaultPath: 'lia-memoria.json',
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      })
+      if (result.canceled || !result.filePath || !authorized(event))
+        return { ok: false, code: 'cancelled' }
+      const snapshot = await memory.get()
+      if (!snapshot.ok || !authorized(event))
+        return { ok: false, code: 'unavailable' }
+      await writeFile(result.filePath, JSON.stringify(snapshot.value, null, 2), { encoding: 'utf8', flag: 'wx', mode: 0o600 })
+      return { ok: true }
+    }
+    catch { return { ok: false, code: 'unavailable' } }
+    finally { exportingMemory = false }
+  })
   let confirmingMemoryClear = false
   ipcMain.handle(stageMemoryMutate, async (event, request: LiaMemoryMutation) => {
     const owner = window

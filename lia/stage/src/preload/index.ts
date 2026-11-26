@@ -7,7 +7,7 @@ import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMe
 import { stageConversationChange, stageHistoryChange, stageHistoryGet, stageHistoryImport, stageHistoryRemoveMessage, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
 import { stagePersonaChange, stagePersonaGet } from '../shared/chat-ipc.ts'
 import { stagePresenceReadPackagedAvatar, stagePresenceVisibility } from '../shared/chat-ipc.ts'
-import { stageHubCatalogGet } from '../shared/chat-ipc.ts'
+import { stageHubCatalogGet, stageMemoryExport } from '../shared/chat-ipc.ts'
 import { stageChatStopSpeech, stageVoiceAutoPlay } from '../shared/chat-ipc.ts'
 
 contextBridge.exposeInMainWorld('liaStageLanguage', {
@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld('liaStagePresence', {
 
 contextBridge.exposeInMainWorld('liaStageMemory', {
   get: () => ipcRenderer.invoke(stageMemoryGet),
+  exportNotes: () => ipcRenderer.invoke(stageMemoryExport),
   mutate: (request: LiaMemoryMutation) => ipcRenderer.invoke(stageMemoryMutate, request),
 })
 

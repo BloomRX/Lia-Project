@@ -31,19 +31,18 @@ export function composeStageContext(
 ): ChatRequest['messages'] {
   const { name, role, integrity, honesty } = LIA_STAGE_IDENTITY
   const identity = `Você é ${name}, a ${role}.\n${integrity}\n${honesty}`
-  const sections = [identity, `Personalidade\n${personality}`]
-  if (memory)
-    sections.push(`Memória pessoal autorizada\n${memory}`)
+  const system = `${identity}\n\nPersonalidade\n${personality}`
+  const userText = memory ? `${text}\n\n${memory}` : text
   return [
-    { role: 'system', content: sections.join('\n\n') },
+    { role: 'system', content: system },
     ...turns.flatMap(turn => [
       { role: 'user', content: turn.user },
       { role: 'assistant', content: turn.assistant },
     ]),
     { role: 'user', content: attachment ? [
-      { type: 'text', text },
+      { type: 'text', text: userText },
       { type: 'image_url', image_url: { url: attachment } },
-    ] : text },
+    ] : userText },
   ]
 }
 

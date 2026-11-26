@@ -136,9 +136,28 @@
           <div>
             <label for="memory-note" data-translate>Nova nota</label>
             <textarea id="memory-note" rows="2" maxlength="500"></textarea>
+            <label for="memory-kind" data-translate>Tipo de nota</label>
+            <select id="memory-kind">
+              <option value="user" data-translate>Usuário</option>
+              <option value="project" data-translate>Projeto</option>
+              <option value="semantic" data-translate>Conhecimento</option>
+              <option value="episodic" data-translate>Episódio</option>
+              <option value="procedural" data-translate>Procedimento</option>
+              <option value="autobiographical" data-translate>Experiência registrada da Lia</option>
+            </select>
+            <label for="memory-classification" data-translate>Classificação</label>
+            <select id="memory-classification">
+              <option value="fact" data-translate>Fato declarado</option>
+              <option value="inference" data-translate>Inferência</option>
+              <option value="hypothesis" data-translate>Hipótese</option>
+            </select>
+            <label for="memory-expires" data-translate>Recuperar até (data UTC, opcional)</label>
+            <input id="memory-expires" type="date">
+            <button id="memory-cancel-edit" type="button" hidden data-translate>Cancelar edição</button>
             <button id="memory-save" type="button" data-translate>Salvar nota</button>
           </div>
           <ul id="memory-entries" aria-label="Notas salvas"></ul>
+          <button id="memory-export" type="button" disabled data-translate>Exportar notas</button>
           <button id="memory-clear" type="button" disabled data-translate>Apagar notas</button>
         </fieldset>
         <p id="memory-status" role="status"></p>

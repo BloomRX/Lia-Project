@@ -8,17 +8,47 @@ const save = document.querySelector('#memory-save')
 const clear = document.querySelector('#memory-clear')
 const entries = document.querySelector('#memory-entries')
 const status = document.querySelector('#memory-status')
+const kind = document.querySelector('#memory-kind')
+const classification = document.querySelector('#memory-classification')
+const expires = document.querySelector('#memory-expires')
+const cancelEdit = document.querySelector('#memory-cancel-edit')
+const exportNotes = document.querySelector('#memory-export')
 let current
+let editingId
+
+function resetEditor() {
+  editingId = undefined
+  note.value = ''
+  kind.value = 'user'
+  classification.value = 'fact'
+  expires.value = ''
+  cancelEdit.hidden = true
+}
 
 function render(state) {
   current = state
   enabled.checked = state.enabled
   clear.disabled = state.entries.length === 0
+  exportNotes.disabled = clear.disabled
+  if (editingId && !state.entries.some(entry => entry.id === editingId))
+    resetEditor()
   entries.replaceChildren()
   for (const entry of state.entries) {
     const row = document.createElement('li')
     const text = document.createElement('span')
     text.textContent = entry.text
+    const edit = document.createElement('button')
+    edit.type = 'button'
+    edit.textContent = t('Editar nota')
+    edit.addEventListener('click', () => {
+      editingId = entry.id
+      note.value = entry.text
+      kind.value = entry.metadata?.kind ?? 'user'
+      classification.value = entry.metadata?.classification ?? 'fact'
+      expires.value = entry.metadata?.expiresAt?.slice(0, 10) ?? ''
+      cancelEdit.hidden = false
+      note.focus()
+    })
     const remove = document.createElement('button')
     remove.type = 'button'
     remove.textContent = t('Remover')
@@ -28,7 +58,7 @@ function render(state) {
         note.focus()
       }
     })
-    row.append(text, ' ', remove)
+    row.append(text, ' ', edit, ' ', remove)
     entries.append(row)
   }
 }
@@ -69,9 +99,35 @@ save.addEventListener('click', async () => {
     note.focus()
     return
   }
-  if (await run(() => memory.mutate({ action: 'save', text }), t('Nota salva.')))
-    note.value = ''
+  const metadata = {
+    kind: kind.value,
+    classification: classification.value,
+    expiresAt: expires.value ? `${expires.value}T23:59:59.999Z` : null,
+  }
+  if (await run(() => memory.mutate({ action: 'save', id: editingId, text, metadata }), t('Nota salva.')))
+    resetEditor()
   note.focus()
+})
+
+cancelEdit.addEventListener('click', () => {
+  resetEditor()
+  note.focus()
+})
+
+exportNotes.addEventListener('click', async () => {
+  controls.disabled = true
+  try {
+    const result = await memory.exportNotes()
+    status.textContent = result.ok ? t('Notas exportadas.')
+      : result.code === 'cancelled' ? '' : t('Não foi possível exportar. Escolha um arquivo novo.')
+  }
+  catch {
+    status.textContent = t('Não foi possível exportar. Escolha um arquivo novo.')
+  }
+  finally {
+    controls.disabled = false
+    exportNotes.focus()
+  }
 })
 
 clear.addEventListener('click', async () => {

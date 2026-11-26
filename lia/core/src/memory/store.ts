@@ -1,11 +1,11 @@
-import type { LiaMemoryMutation, LiaMemoryResult, LiaMemoryState } from './contracts.ts'
+import type { LiaMemoryMetadata, LiaMemoryMetadataInput, LiaMemoryMutation, LiaMemoryResult, LiaMemoryState } from './contracts.ts'
 
 import { randomUUID } from 'node:crypto'
 import { link, lstat, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 import { buildMemoryContext } from './context.ts'
-import { LIA_MEMORY_LIMITS } from './contracts.ts'
+import { LIA_MEMORY_CLASSIFICATIONS, LIA_MEMORY_KINDS, LIA_MEMORY_LIMITS } from './contracts.ts'
 
 const empty = (): LiaMemoryState => ({ schemaVersion: 1, enabled: false, entries: [] })
 const fail = (code: 'invalid' | 'unavailable' | 'limit' | 'missing'): LiaMemoryResult<never> => ({ ok: false, code })
@@ -30,13 +30,33 @@ function containsDisallowedControlCharacter(value: string): boolean {
 function validId(value: unknown): value is string {
   return typeof value === 'string' && /^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(value)
 }
+function canonicalInstant(value: unknown): value is string {
+  return typeof value === 'string' && value.length === 24 && Number.isFinite(Date.parse(value))
+    && new Date(value).toISOString() === value
+}
+
+function validMetadataInput(value: unknown): value is LiaMemoryMetadataInput {
+  return object(value) && LIA_MEMORY_KINDS.some(kind => kind === value.kind)
+    && LIA_MEMORY_CLASSIFICATIONS.some(classification => classification === value.classification)
+    && (value.expiresAt === undefined || value.expiresAt === null || canonicalInstant(value.expiresAt))
+}
+
+function parseMetadata(value: unknown): LiaMemoryMetadata {
+  if (!object(value) || value.provenance !== 'user' || !canonicalInstant(value.createdAt) || !validMetadataInput(value)
+    || value.expiresAt === null)
+    throw new Error('invalid')
+  const { kind, classification, createdAt, expiresAt } = value
+  return { kind, classification, provenance: 'user', createdAt, ...(expiresAt === undefined ? {} : { expiresAt }) }
+}
+
 function parseState(value: unknown): LiaMemoryState {
   if (!object(value) || value.schemaVersion !== 1 || typeof value.enabled !== 'boolean' || !Array.isArray(value.entries) || value.entries.length > LIA_MEMORY_LIMITS.entries)
     throw new Error('invalid')
   const entries = value.entries.map((entry) => {
     if (!object(entry) || !validId(entry.id) || !validText(entry.text) || typeof entry.updatedAt !== 'string' || entry.updatedAt.length > 40 || !Number.isFinite(Date.parse(entry.updatedAt)))
       throw new Error('invalid')
-    return { id: entry.id, text: entry.text, updatedAt: entry.updatedAt }
+    const metadata = entry.metadata === undefined ? undefined : parseMetadata(entry.metadata)
+    return { id: entry.id, text: entry.text, updatedAt: entry.updatedAt, ...(metadata ? { metadata } : {}) }
   })
   if (new Set(entries.map(entry => entry.id)).size !== entries.length)
     throw new Error('invalid')
@@ -46,7 +66,7 @@ function parseState(value: unknown): LiaMemoryState {
 async function readDocument(path: string): Promise<LiaMemoryState | undefined> {
   try {
     const stat = await lstat(path)
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 300_000)
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 400_000)
       throw new Error('invalid')
     return parseState(JSON.parse(await readFile(path, 'utf8')))
   }
@@ -125,14 +145,30 @@ export function createLiaMemoryStore(params: { filePath: string }) {
           const existing = request.id ? state.entries.find(entry => entry.id === request.id) : undefined
           if (request.id && !existing)
             return fail('missing')
+          const now = new Date().toISOString()
+          let metadata = existing?.metadata
+          if (request.metadata !== undefined) {
+            if (!validMetadataInput(request.metadata)
+              || !Object.keys(request.metadata).every(key => ['kind', 'classification', 'expiresAt'].includes(key)))
+              return fail('invalid')
+            const { kind, classification } = request.metadata
+            const expiresAt = request.metadata.expiresAt === undefined ? metadata?.expiresAt : request.metadata.expiresAt
+            metadata = {
+              kind, classification, provenance: 'user',
+              createdAt: metadata?.createdAt ?? (existing ? new Date(existing.updatedAt).toISOString() : now),
+              ...(expiresAt ? { expiresAt } : {}),
+            }
+          }
           if (existing) {
             existing.text = request.text.trim()
-            existing.updatedAt = new Date().toISOString()
+            existing.updatedAt = now
+            if (metadata)
+              existing.metadata = metadata
           }
           else {
             if (state.entries.length >= LIA_MEMORY_LIMITS.entries)
               return fail('limit')
-            state.entries.push({ id: randomUUID(), text: request.text.trim(), updatedAt: new Date().toISOString() })
+            state.entries.push({ id: randomUUID(), text: request.text.trim(), updatedAt: now, ...(metadata ? { metadata } : {}) })
           }
         }
         else if (request.action === 'remove' && validId(request.id)) {

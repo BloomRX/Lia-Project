@@ -318,7 +318,8 @@ test('carries completed turns and keeps history out of a different model', async
     assert.deepEqual(requests[2]!.messages.slice(1), [{ role: 'user', content: 'Novo modelo' }])
     useMemory = true
     assert.equal((await submit('Com memória')).ok, true)
-    assert.match(requests[3]!.messages[0]!.content, /Contexto pessoal de teste$/)
+    assert.doesNotMatch(requests[3]!.messages[0]!.content, /Contexto pessoal de teste/)
+    assert.deepEqual(requests[3]!.messages.at(-1), { role: 'user', content: 'Com memória\n\nContexto pessoal de teste' })
     assert.equal(requests[3]!.messages.filter(message => message.role === 'system').length, 1)
     useMemory = false
     assert.equal((await submit('Sem memória')).ok, true)
