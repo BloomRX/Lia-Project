@@ -102,6 +102,16 @@ try {
     $actual = (Get-FileHash -LiteralPath $installedNotice -Algorithm SHA256).Hash
     if ($actual -ne $expected) { throw 'O aviso MIT instalado diverge do texto versionado.' }
     $report['attributionSha256'] = $actual
+    $runtime = Join-Path $PSScriptRoot '../../stage/node_modules/electron/dist'
+    $notices = @{ 'LICENSE.electron.txt' = 'LICENSE'; 'LICENSES.chromium.html' = 'LICENSES.chromium.html' }
+    foreach ($name in $notices.Keys) {
+      $expected = (Get-FileHash -LiteralPath (Join-Path $runtime $notices[$name]) -Algorithm SHA256).Hash
+      foreach ($payload in @($destination, (Join-Path $destination 'resources/stage'))) {
+        $installed = (Get-FileHash -LiteralPath (Join-Path $payload $name) -Algorithm SHA256).Hash
+        if ($installed -ne $expected) { throw "O aviso instalado diverge do runtime oficial: $name" }
+      }
+    }
+    $report['runtimeNoticesVerified'] = $true
   }
   if ($RequireBranding) {
     Add-Type -AssemblyName System.Drawing

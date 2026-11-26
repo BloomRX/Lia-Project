@@ -36,8 +36,9 @@ Launcher. O ícone da Lia é um recurso dos executáveis e fica fora do ASAR.
 
 Os hashes delimitam os arquivos a revisar. Faltam evidências de autoria e
 direitos de distribuição pública para os dois assets e uma licença explícita
-do produto. O gate de instalação verifica a presença dos avisos do runtime e
-da atribuição MIT, conforme o escopo do pacote privado.
+do produto. O empacotador verifica os avisos do Electron e do Chromium no
+pacote descompactado. O gate com `-RequireAttribution` compara os mesmos
+avisos no Launcher e no Stage instalados e confere a atribuição MIT.
 
 ## Histórico de 08/11/2026 — pacote anterior
 
