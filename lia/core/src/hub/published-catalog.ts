@@ -1,5 +1,4 @@
-import { createReadStream } from 'node:fs'
-import { lstat } from 'node:fs/promises'
+import { lstat, open } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
 
 const maxBytes = 1024 * 1024
@@ -28,13 +27,23 @@ export async function readPublishedHubCatalog(userHome: string, hubHome?: string
     const stat = await lstat(path)
     if (!stat.isFile() || stat.size > maxBytes)
       return { status: 'unavailable' }
-    const chunks: Buffer[] = []
-    for await (const chunk of createReadStream(path, { end: maxBytes }))
-      chunks.push(chunk)
-    const bytes = Buffer.concat(chunks)
-    if (bytes.length > maxBytes)
-      return { status: 'unavailable' }
-    const index: unknown = JSON.parse(bytes.toString('utf8'))
+    const file = await open(path, 'r')
+    let index: unknown
+    try {
+      const opened = await file.stat()
+      if (!opened.isFile() || opened.size > maxBytes || opened.dev !== stat.dev || opened.ino !== stat.ino)
+        return { status: 'unavailable' }
+      const chunks: Buffer[] = []
+      for await (const chunk of file.createReadStream({ end: maxBytes, autoClose: false }))
+        chunks.push(chunk)
+      const bytes = Buffer.concat(chunks)
+      if (bytes.length > maxBytes)
+        return { status: 'unavailable' }
+      index = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes))
+    }
+    finally {
+      await file.close()
+    }
     if (!record(index) || index.schemaVersion !== 1 || index.scope !== 'active' || !Array.isArray(index.capabilities))
       return { status: 'unavailable' }
 

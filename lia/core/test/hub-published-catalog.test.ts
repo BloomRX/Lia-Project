@@ -24,3 +24,16 @@ test('reads the Hub published active catalog and returns only display metadata',
   await writeFile(join(folder, 'index.json'), JSON.stringify({ schemaVersion: 2, scope: 'active', capabilities: [] }))
   assert.deepEqual(await readPublishedHubCatalog(home, root), { status: 'unavailable' })
 })
+
+test('rejects oversized catalogs and malformed UTF-8', async (t) => {
+  const home = await mkdtemp(join(tmpdir(), 'lia-hub-catalog-'))
+  t.after(() => rm(home, { recursive: true, force: true }))
+  const folder = join(home, 'Lia', 'Comum', 'Capacidades')
+  await mkdir(folder, { recursive: true })
+  const path = join(folder, 'index.json')
+  await writeFile(path, Buffer.alloc(1024 * 1024 + 1, 0x20))
+  assert.deepEqual(await readPublishedHubCatalog(home), { status: 'unavailable' })
+  const prefix = Buffer.from('{"schemaVersion":1,"scope":"active","capabilities":[{"id":"tool","type":"cli-tool","lifecycle":"active","name":"')
+  await writeFile(path, Buffer.concat([prefix, Buffer.from([0xFF]), Buffer.from('"}]}')]))
+  assert.deepEqual(await readPublishedHubCatalog(home), { status: 'unavailable' })
+})
