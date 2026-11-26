@@ -2,6 +2,8 @@
 
 ## 0. Estado agora
 
+- **Evolution Program V1.** Memória local classificada e editável, catálogo do Hub filtrável, sugestão de relógio, expressão simulada no chat, na voz e no VRM, cópia supervisionada de imagem e tokens visuais V1.1 chegaram ao desktop próprio. A [trilha de execução](LIA-EVOLUTION-PROGRAM-V1.md) registra os gates Windows e os limites de delegação e aprovação de telas.
+
 - **Cognitive Foundation V1.** O Stage combina identidade versionada, personalidade persistida, histórico e memória autorizada para montar a requisição ao modelo. A consulta de relógio exige confirmação no Main a cada turno e o catálogo publicado do Agent Hub é informativo. O Electron Windows confirmou o fluxo com HTTP sintético, respostas de diálogo injetadas e índice publicado pelo Hub. Consulte a [arquitetura cognitiva](../architecture/LIA-COGNITIVE-ARCHITECTURE.md#cognitive-foundation-v1-no-stage).
 
 - **CI Windows do desktop próprio.** O [workflow em `d29771ed`](https://github.com/BloomRX/Lia-Project/actions/runs/45765929613) passou em uma árvore sem `airi/`. Os relatórios confirmam instalação privada, conversa instalada com HTTP local sintético, upgrade NSIS de 0.0.1 para 0.0.2 com substituição do Stage, preservação do perfil e da credencial sintética DPAPI, encerramento e desinstalação. AllTalk e OIDC passaram com serviços locais sintéticos. A busca nos arquivos de build, runtime e CI encontrou referências AIRI em testes de fronteira e na descoberta do perfil histórico do usuário.

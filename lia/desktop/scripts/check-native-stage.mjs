@@ -269,6 +269,19 @@ async function run() {
   let phase = 'launcher-window'
   try {
     page = await app.firstWindow()
+    if (process.argv.includes('--verify-foundation')) {
+      phase = 'launcher-design-foundation'
+      const action = page.getByRole('button', { name: 'Conversar com Lia', exact: true })
+      await action.waitFor()
+      const colors = await action.evaluate((button) => {
+        const app = getComputedStyle(document.querySelector('#app'))
+        const styles = getComputedStyle(button)
+        return { background: app.backgroundColor, text: app.color, action: styles.backgroundColor, onAction: styles.color }
+      })
+      assert.deepEqual(colors, { background: 'rgb(20, 17, 34)', text: 'rgb(230, 223, 248)', action: 'rgb(255, 74, 142)', onAction: 'rgb(89, 0, 40)' })
+      await page.screenshot({ path: join(evidence, 'launcher-foundation.png'), fullPage: true })
+      console.log(`Foundation do Launcher verificada em ${evidence}`)
+    }
     phase = 'launcher-start-action'
     await page.getByRole('button', { name: 'Conversar com Lia', exact: true }).click({ timeout: 10_000 })
     phase = 'stage-ready'

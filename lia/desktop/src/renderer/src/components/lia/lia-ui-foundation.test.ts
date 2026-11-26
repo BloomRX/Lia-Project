@@ -9,8 +9,7 @@ import { describe, expect, it } from 'vitest'
  * is node-only by design). The guarantees here are structural: what the
  * token sheet defines, what the primitives ARE (native semantics by
  * construction), and what they can NEVER contain (product/backend logic,
- * engine jargon). No existing screen is migrated yet - these tests pin
- * the foundation the upcoming phases build on.
+ * engine jargon), and how Launcher consumes the shared Foundation palette.
  */
 
 function readSource(relative: string): string {
@@ -23,7 +22,7 @@ const PANEL = () => readSource('./LiaPanel.vue')
 const BUTTON = () => readSource('./LiaButton.vue')
 const CHIP = () => readSource('./LiaStatusChip.vue')
 
-describe('8.0A-1 design tokens (foundation only, no migration)', () => {
+describe('Launcher design foundation', () => {
   it('a: the global Lia token stylesheet exists and is loaded by the renderer entry', () => {
     // The file itself...
     expect(TOKENS_CSS()).toContain(':root')
@@ -81,6 +80,17 @@ describe('8.0A-1 design tokens (foundation only, no migration)', () => {
     expect(css).toContain('--lia-status-ready: var(--lia-ok)')
     expect(css).toContain('--lia-status-warning: var(--lia-warn)')
     expect(css).toContain('--lia-status-error: var(--lia-err)')
+  })
+
+  it('pairs Launcher primary actions with the shared foreground, hover and focus tokens', () => {
+    const styles = readSource('../../styles.css')
+    expect(styles).toContain("@import '../../../../assets/styles/lia-foundation.css'")
+    expect(styles).toContain('color: var(--lia-accent-contrast)')
+    expect(styles).toContain('outline: 2px solid var(--lia-foundation-focus)')
+    expect(styles).toContain('outline-color: Highlight')
+    expect(TOKENS_CSS()).toContain('--lia-accent-action: var(--lia-foundation-action)')
+    expect(TOKENS_CSS()).toContain('--lia-accent-action-hover: var(--lia-foundation-action-hover)')
+    expect(TOKENS_CSS()).toContain('--lia-accent-contrast: var(--lia-foundation-on-action)')
   })
 
   it('tokens stay semantic: no page-specific names', () => {

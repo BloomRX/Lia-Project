@@ -1,16 +1,18 @@
+@import '../../../../assets/styles/lia-foundation.css';
+
 :root {
-  --lia-bg: #0d0a12;
-  --lia-panel: #17111f;
-  --lia-panel-2: #1f1629;
-  --lia-border: #32244a;
-  --lia-magenta: #e545c8;
-  --lia-magenta-soft: #b0359a;
-  --lia-text: #f2ecf7;
-  --lia-text-dim: #9b8db0;
+  --lia-bg: var(--lia-foundation-background);
+  --lia-panel: var(--lia-foundation-surface);
+  --lia-panel-2: var(--lia-foundation-raised);
+  --lia-border: var(--lia-foundation-outline);
+  --lia-magenta: var(--lia-foundation-action);
+  --lia-magenta-soft: var(--lia-foundation-action-hover);
+  --lia-text: var(--lia-foundation-text);
+  --lia-text-dim: var(--lia-foundation-muted);
   --lia-ok: #4ade80;
   --lia-warn: #facc15;
-  --lia-err: #f87171;
-  font-family: 'Segoe UI', system-ui, sans-serif;
+  --lia-err: var(--lia-foundation-error);
+  font-family: var(--lia-foundation-font);
 }
 
 * { box-sizing: border-box; }
@@ -23,6 +25,15 @@ html, body, #app {
 }
 
 a { color: var(--lia-magenta); }
+
+:focus-visible {
+  outline: 2px solid var(--lia-foundation-focus);
+  outline-offset: 2px;
+}
+
+@media (forced-colors: active) {
+  :focus-visible { outline-color: Highlight; }
+}
 
 button {
   background: var(--lia-panel-2);
@@ -41,7 +52,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 button.primary {
   background: var(--lia-accent-action);
   border: none;
-  color: #fff;
+  color: var(--lia-accent-contrast);
   font-weight: 700;
 }
 
@@ -49,7 +60,7 @@ button.primary:hover:not(:disabled) { background: var(--lia-accent-action-hover)
 
 .chip {
   align-items: center;
-  border: 1px solid var(--lia-border);
+  border: 1px solid var(--lia-foundation-outline-variant);
   border-radius: 999px;
   display: inline-flex;
   font-size: 12px;
@@ -65,7 +76,7 @@ button.primary:hover:not(:disabled) { background: var(--lia-accent-action-hover)
 
 .card {
   background: var(--lia-panel);
-  border: 1px solid var(--lia-border);
+  border: 1px solid var(--lia-foundation-outline-variant);
   border-radius: 14px;
   padding: 18px 20px;
 }

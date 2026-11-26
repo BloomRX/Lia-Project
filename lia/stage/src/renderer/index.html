@@ -2,25 +2,29 @@
 <html lang="pt-BR">
   <head>
     <meta charset="utf-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; media-src blob:; img-src blob:; connect-src blob:; base-uri 'none'; form-action 'none'">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; media-src blob:; img-src blob:; connect-src blob:; base-uri 'none'; form-action 'none'">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Lia</title>
+    <link rel="stylesheet" href="../../../assets/styles/lia-foundation.css">
     <style>
-      :root { color-scheme: dark; font: 16px system-ui, sans-serif; background: #171421; color: #f5efff; }
+      :root { color-scheme: dark; font: 16px var(--lia-foundation-font); background: var(--lia-foundation-background); color: var(--lia-foundation-text); }
       body { margin: 0; }
       main { display: grid; gap: 1rem; padding: 1.25rem; }
       h1, p { margin: 0; }
       #messages { display: grid; align-content: start; gap: .75rem; min-height: 9rem; max-height: 45vh; overflow: auto; }
-      .message { background: #292239; border-radius: .65rem; padding: .7rem .85rem; overflow-wrap: anywhere; white-space: pre-wrap; }
+      .message { background: var(--lia-foundation-surface); border-radius: .65rem; padding: .7rem .85rem; overflow-wrap: anywhere; white-space: pre-wrap; }
       .message .message-remove { display: block; margin-top: .35rem; padding: .2rem .45rem; font-size: .8rem; }
       form { display: grid; gap: .65rem; }
-      textarea, button { font: inherit; border: 1px solid #786a92; border-radius: .5rem; padding: .6rem; }
-      textarea { background: #221c30; color: inherit; resize: vertical; }
-      button { min-width: 6rem; background: #36294f; color: inherit; }
-      button[type="submit"] { background: #dbc4ff; color: #211634; }
+      textarea, button, select, input:where([type='search'], [type='date'], [type='number']) { font: inherit; border: 1px solid var(--lia-foundation-outline); border-radius: .5rem; padding: .6rem; }
+      textarea, select, input:where([type='search'], [type='date'], [type='number']) { background: var(--lia-foundation-input); color: inherit; max-inline-size: 100%; }
+      textarea { resize: vertical; }
+      button { min-width: 6rem; background: var(--lia-foundation-raised); color: inherit; }
+      button[type="submit"]:not(#suggest-clock) { background: var(--lia-foundation-action); color: var(--lia-foundation-on-action); }
+      button[type="submit"]:not(#suggest-clock):hover:not(:disabled) { background: var(--lia-foundation-action-hover); }
       button:disabled { opacity: .55; }
-      :focus-visible { outline: 3px solid #e3bcff; outline-offset: 3px; }
-      #status { min-height: 1.6em; color: #d6c7e7; }
+      :focus-visible { outline: 2px solid var(--lia-foundation-focus); outline-offset: 2px; }
+      @media (forced-colors: active) { :focus-visible { outline-color: Highlight; } }
+      #status { min-height: 1.6em; color: var(--lia-foundation-muted); }
       #traits-fieldset { min-inline-size: 0; margin: .5rem 0 0; }
       #trait-inputs { display: grid; gap: .35rem; margin-bottom: .65rem; }
       #trait-inputs > div { display: grid; grid-template-columns: minmax(0, 1fr) 5rem; align-items: center; gap: .5rem; }

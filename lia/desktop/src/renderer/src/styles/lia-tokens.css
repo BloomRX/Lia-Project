@@ -1,8 +1,8 @@
 /**
  * Phase 8.0A-1: the Lia design-token foundation.
  *
- * The raw palette declared in `styles.css` stays the SINGLE source of
- * color values; these SEMANTIC tokens are the layer primitives and future
+ * The shared Lia Foundation palette is mapped by `styles.css`.
+ * These semantic tokens are the layer primitives and future
  * screens consume - backgrounds/surfaces, borders, text, the Lia identity
  * accent, status semantics, radius/spacing scales, typography roles, the
  * focus ring and the basic motion duration (LIA-UI-DESIGN-SYSTEM §2,
@@ -27,9 +27,9 @@
      actions, focus, key borders - used sparingly, never everywhere). */
   --lia-accent: var(--lia-magenta);
   --lia-accent-soft: var(--lia-magenta-soft);
-  --lia-accent-contrast: #fff;
-  --lia-accent-action: #a62b90;
-  --lia-accent-action-hover: #8f247c;
+  --lia-accent-contrast: var(--lia-foundation-on-action);
+  --lia-accent-action: var(--lia-foundation-action);
+  --lia-accent-action-hover: var(--lia-foundation-action-hover);
 
   /* Status semantics (§27: state must be readable, never color-only). */
   --lia-status-ready: var(--lia-ok);
@@ -54,7 +54,7 @@
   --lia-space-12: 48px;
 
   /* Typography roles (§26: compact status -> page title). */
-  --lia-font-family: 'Segoe UI', system-ui, sans-serif;
+  --lia-font-family: var(--lia-foundation-font);
   --lia-text-xs: 12px;
   --lia-text-sm: 13px;
   --lia-text-md: 14px;
@@ -67,7 +67,7 @@
 
   /* Focus ring: visible keyboard focus built from the app background
      gap + the identity accent (§21 accent-for-focus). */
-  --lia-focus-ring: 0 0 0 2px var(--lia-bg-app), 0 0 0 4px var(--lia-accent);
+  --lia-focus-ring: 0 0 0 2px var(--lia-bg-app), 0 0 0 4px var(--lia-foundation-focus);
 
   /* Motion: the one basic transition duration. */
   --lia-transition-fast: 150ms;

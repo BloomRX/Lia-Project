@@ -122,6 +122,15 @@ try {
   app = await launch()
   let page = await app.firstWindow()
   page.setDefaultTimeout(10_000)
+  const stageTheme = await page.evaluate(() => {
+    const root = getComputedStyle(document.documentElement)
+    const submit = getComputedStyle(document.querySelector('button[type="submit"]'))
+    return { background: root.backgroundColor, text: root.color, action: submit.backgroundColor, onAction: submit.color }
+  })
+  assert.deepEqual(stageTheme, { background: 'rgb(20, 17, 34)', text: 'rgb(230, 223, 248)', action: 'rgb(255, 74, 142)', onAction: 'rgb(89, 0, 40)' })
+  await page.getByLabel('Mensagem', { exact: true }).focus()
+  assert.equal(await page.getByLabel('Mensagem', { exact: true }).evaluate(field => getComputedStyle(field).outlineWidth), '2px')
+  await page.screenshot({ path: join(root, 'stage-foundation.png'), fullPage: true })
   await page.getByText('Lia Agent Hub', { exact: true }).click()
   await page.getByRole('button', { name: 'Consultar catálogo' }).click()
   const hubItems = page.locator('#hub-capabilities li')
@@ -460,6 +469,7 @@ try {
   await submit(page, 'Ainda há notas do Observatório?', requests.length + 1)
   assert.doesNotMatch(JSON.stringify(requests.at(-1)), /filtro violeta|versão expirada/)
   const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, legacyTextImported: true, cancellationPreservedHistory: true, cleared: true, clearDisabledWhenEmpty: true, rateLimitSanitized: true, refusedImageWithoutVision: true, conversationsIsolated: true, selectionRestored: true, deletionConfirmed: true, builtInPersonaInRequest: true, importedPersonaInRequest: true, importedPersonaRestored: true, personaContextIsolated: true, kokoroSelectedByLauncher: Boolean(kokoroVoice), kokoroVoice: kokoroVoice ?? (withVoice ? 'default' : null), localKokoroMutedPlayback: withVoice ? 'cancelled, retried, played and stopped' : null, autoPlay: withVoice ? 'opt-in, persisted, played, opted out' : null, customizedTraitsPersisted: true }
+  report.designFoundation = { colorsApplied: true, keyboardFocusVisible: true }
   report.simulatedExpression = { successfulReply: true, localMutedPlayback: withVoice ? true : null }
   report.localClockRoundTrip = true
   report.clockSuggestion = { draftPreserved: true, noModelRequest: true }

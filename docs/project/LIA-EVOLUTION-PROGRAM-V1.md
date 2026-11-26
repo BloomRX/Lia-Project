@@ -11,7 +11,7 @@ Lia-Project. O plano de produto e a arquitetura cognitiva definem os limites.
 | 05 Personality & Emotion | VALIDATED | Estado observado em chat, áudio e expressão VRM. |
 | 06 Perception & Action | VALIDATED | Inspeção e cópia supervisionada de anexo. Demais fontes dependem de autorização específica. |
 | 07 Avatar & Presence | VALIDATED | Reação no VRM, dois monitores e suspensão verificados. |
-| 08 Design Foundation | IN_PROGRESS | Identificar os materiais oficiais aprovados. |
+| 08 Design Foundation | PARTIAL | Tokens oficiais aplicados. Layouts e materiais de tela aguardam aprovação. |
 
 ## Checkpoint
 
@@ -139,3 +139,43 @@ descrevem o fixture e o processo medido. Jogos e GPU não foram medidos.
 
 Próxima ação concreta. Aplicar os tokens publicados da Foundation V1.1
 ao Launcher e ao Stage. Os candidatos a layouts continuam em revisão.
+
+## Meta 08 com tokens oficiais validados
+
+A Meta 07 está publicada em `0fc7ca1c`. A Foundation V1.1.0 do Stitch
+Design Hub congelou o JSON com SHA-256
+`4898BE854BFD84BB412288F766FB217AFEE3F0F3EA1C072B62DDA4F870E186D5`.
+A seleção compartilhada em `lia/assets/styles/lia-foundation.css` fornece
+superfícies, texto, ações, contornos e foco aos renderers do Launcher e do
+Stage, com Segoe UI e fallback de sistema. A adoção preserva layouts,
+navegação e assets existentes. Os candidatos WIDE, COMPACT e Launcher
+gerado continuam em revisão. A arte Hero candidata permanece sem autorização
+de uso comprovada.
+
+Passaram build e typecheck de Launcher e Stage, lint, 22 testes focados
+do Launcher e 17 no Chromium. As capturas Electron Windows de Launcher
+e Stage passaram na revisão visual. O Launcher abriu e encerrou o Stage
+sem `airi/` no ensaio `lia-native-stage-2ISGu9`.
+
+## Validação integrada e encerramento do incremento V1
+
+No Electron Windows, `check-native-history.mjs --agent-hub --voice`
+(`lia-native-history-4S9w2O`) passou com chat HTTP sintético, catálogo
+publicado de um Hub real e Kokoro local com reprodução silenciada.
+A execução verificou identidade, traços, memória, histórico, sugestão,
+confirmação injetada, relógio, voz e Foundation no Stage. Os gates de visão
+e presença acima verificaram cópia real de arquivo, credencial sintética
+protegida por DPAPI, reação VRM, dois monitores e suspensão. Passaram também
+54 testes do Stage, sete testes focados de memória e Hub e `git diff --check`.
+
+O incremento aplicável das sete metas foi entregue. Meta 03 segue parcial
+até o contrato externo de execução. Meta 08 segue parcial até os layouts e
+materiais de tela serem aprovados. Busca semântica requer embeddings
+validados. Lip-sync fonético, jogos, GPU, áudio físico, provedores externos
+e captura do desktop não foram validados neste programa. Ações gerais de
+agentes e controle amplo do computador não foram implementados.
+
+Evidências locais em `J:/lia-evidence/evolution-program-v1` e capturas
+revisadas em `J:/lia-evidence/captures`. Próxima ação para retomada futura.
+Solicitar aprovação das telas e um contrato de execução ao responsável pelo
+executor, antes de ampliar a integração.

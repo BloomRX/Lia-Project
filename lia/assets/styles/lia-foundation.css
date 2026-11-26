@@ -1,0 +1,17 @@
+/* Lia Design Foundation 1.1.0, approved shared color and focus tokens. */
+:root {
+  --lia-foundation-background: #141122;
+  --lia-foundation-surface: #201d2f;
+  --lia-foundation-raised: #312e40;
+  --lia-foundation-input: #0f0c1d;
+  --lia-foundation-text: #e6dff8;
+  --lia-foundation-muted: #e3bdc5;
+  --lia-foundation-outline: #aa888f;
+  --lia-foundation-outline-variant: #5b3f46;
+  --lia-foundation-action: #ff4a8e;
+  --lia-foundation-on-action: #590028;
+  --lia-foundation-action-hover: #ffb1c5;
+  --lia-foundation-focus: #ffb1c5;
+  --lia-foundation-error: #ffb4ab;
+  --lia-foundation-font: 'Segoe UI', system-ui, sans-serif;
+}
