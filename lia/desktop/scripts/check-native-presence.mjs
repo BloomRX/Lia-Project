@@ -183,6 +183,15 @@ async function run() {
     assert.equal(JSON.parse(await readFile(join(root, 'lia-product.json'), 'utf8')).presence.pauseOnFullscreen, false)
     await fullscreenToggle.click()
     await chat.getByRole('button', { name: 'Ocultar avatar quando o chat estiver em tela cheia', pressed: true }).waitFor()
+    await overlay.evaluate(() => {
+      window.fixtureRenderCount = 0
+      const clear = WebGL2RenderingContext.prototype.clear
+      WebGL2RenderingContext.prototype.clear = function (mask) {
+        window.fixtureRenderCount++
+        return clear.call(this, mask)
+      }
+    })
+    await overlay.waitForFunction(() => window.fixtureRenderCount > 0)
     const stageFullscreen = await app.evaluate(async ({ BrowserWindow }) => {
       const windows = BrowserWindow.getAllWindows()
       const overlay = windows.find(window => window.webContents.getURL().endsWith('/presence.html'))
@@ -196,15 +205,22 @@ async function run() {
       try {
         stage.setFullScreen(true)
         const hidden = await waitFor(() => stage.isFullScreen() && overlay.getOpacity() === 0)
+        const renderCount = () => overlay.webContents.executeJavaScript('window.fixtureRenderCount')
+        await new Promise(resolve => setTimeout(resolve, 200))
+        const before = await renderCount()
+        await new Promise(resolve => setTimeout(resolve, 350))
+        const paused = await renderCount() === before
         stage.setFullScreen(false)
-        return { hidden, visibleAgain: await waitFor(() => !stage.isFullScreen() && overlay.getOpacity() === 1) }
+        const visibleAgain = await waitFor(() => !stage.isFullScreen() && overlay.getOpacity() === 1)
+        await new Promise(resolve => setTimeout(resolve, 300))
+        return { hidden, visibleAgain, paused, resumed: await renderCount() > before }
       }
       finally {
         if (stage.isFullScreen())
           stage.setFullScreen(false)
       }
     })
-    assert.deepEqual(stageFullscreen, { hidden: true, visibleAgain: true })
+    assert.deepEqual(stageFullscreen, { hidden: true, visibleAgain: true, paused: true, resumed: true })
     const displays = await chat.evaluate(() => window.liaStagePresence.displays())
     const secondDisplay = displays.displays.find(({ workArea }) =>
       initial.x < workArea.x || initial.x >= workArea.x + workArea.width

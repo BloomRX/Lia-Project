@@ -6,7 +6,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMemoryMutate, stageMicrophoneArm, stagePresenceClose, stagePresenceCommand, stagePresenceOpen, stagePresenceRead, stagePresenceRendered, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
 import { stageConversationChange, stageHistoryChange, stageHistoryGet, stageHistoryImport, stageHistoryRemoveMessage, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
 import { stagePersonaChange, stagePersonaGet } from '../shared/chat-ipc.ts'
-import { stagePresenceReadPackagedAvatar } from '../shared/chat-ipc.ts'
+import { stagePresenceReadPackagedAvatar, stagePresenceVisibility } from '../shared/chat-ipc.ts'
 import { stageHubCatalogGet } from '../shared/chat-ipc.ts'
 import { stageChatStopSpeech, stageVoiceAutoPlay } from '../shared/chat-ipc.ts'
 
@@ -25,6 +25,14 @@ contextBridge.exposeInMainWorld('liaStagePresence', {
   command: (action: string | { monitor: number | null | 'all' }) => ipcRenderer.invoke(stagePresenceCommand, action),
   displays: () => ipcRenderer.invoke(stagePresenceDisplays),
   read: () => ipcRenderer.invoke(stagePresenceRead),
+  onVisibility: (listener: (visible: boolean) => void) => {
+    const receive = (_event: unknown, visible: unknown) => {
+      if (typeof visible === 'boolean')
+        listener(visible)
+    }
+    ipcRenderer.on(stagePresenceVisibility, receive)
+    return () => ipcRenderer.removeListener(stagePresenceVisibility, receive)
+  },
   reportRender: (rendered: boolean) => ipcRenderer.send(stagePresenceRendered, rendered),
 })
 

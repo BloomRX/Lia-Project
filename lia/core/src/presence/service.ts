@@ -27,11 +27,13 @@ export function createPresenceService(options: {
   initial?: unknown
   save: (config: PresenceConfig) => Promise<void>
   isHostFullscreen?: () => boolean
+  onVisibilityChange?: (visible: boolean) => void
   random?: () => number
 }) {
   const win = options.window
   let config = structuredClone(isPresenceConfig(options.initial) ? options.initial : defaultPresence)
   let active = false
+  let visible = true
   let disposed = false
   let original: { bounds: PresenceBounds, top: boolean, opacity: number, minimum: number[] } | undefined
   let destination: PresenceBounds | undefined
@@ -65,6 +67,10 @@ export function createPresenceService(options: {
     win.setBounds(bounds)
     win.setAlwaysOnTop(original.top)
     win.setOpacity(original.opacity)
+    if (!visible) {
+      visible = true
+      options.onVisibilityChange?.(true)
+    }
     original = undefined
     destination = undefined
   }
@@ -90,7 +96,12 @@ export function createPresenceService(options: {
     const cursor = options.screen.getCursorScreenPoint()
     const hover = cursor.x >= bounds.x && cursor.x < bounds.x + bounds.width && cursor.y >= bounds.y && cursor.y < bounds.y + bounds.height
     const fullscreenPaused = config.pauseOnFullscreen && fullscreen()
-    win.setOpacity(fullscreenPaused || (config.hideOnHover && hover) ? 0 : original?.opacity ?? 1)
+    const nextVisible = !fullscreenPaused && !(config.hideOnHover && hover)
+    if (nextVisible !== visible) {
+      visible = nextVisible
+      win.setOpacity(visible ? original?.opacity ?? 1 : 0)
+      options.onVisibilityChange?.(visible)
+    }
     if (config.paused || config.pinned || fullscreenPaused || hover)
       return
     if (!destination || ++ticks > 150) {

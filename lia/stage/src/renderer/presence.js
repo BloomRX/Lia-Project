@@ -4,7 +4,11 @@ import { createAvatarView } from './avatar-view.js'
 
 const canvas = document.querySelector('canvas')
 let view
-window.addEventListener('pagehide', () => view?.dispose(), { once: true })
+const unlisten = window.liaStagePresence.onVisibility(visible => view?.setRenderingEnabled(visible))
+window.addEventListener('pagehide', () => {
+  unlisten()
+  view?.dispose()
+}, { once: true })
 try {
   const bytes = await window.liaStagePresence.read()
   if (!(bytes instanceof Uint8Array))

@@ -6,6 +6,7 @@ import { BrowserWindow, screen } from 'electron'
 
 import { defaultPresence } from '../../../core/src/presence/index.ts'
 import { createPresenceService } from '../../../core/src/presence/service.ts'
+import { stagePresenceVisibility } from '../shared/chat-ipc.ts'
 
 export function createStagePresence(options: {
   isHostFullscreen: () => boolean
@@ -53,6 +54,10 @@ export function createStagePresence(options: {
       const rendered = new Promise<boolean>((resolve) => { settleRender = resolve })
       const controller = createPresenceService({
         window: overlay,
+        onVisibilityChange(visible) {
+          if (!overlay.isDestroyed() && !overlay.webContents.isDestroyed())
+            overlay.webContents.send(stagePresenceVisibility, visible)
+        },
         isHostFullscreen: options.isHostFullscreen,
         screen: {
           getAllDisplays: () => screen.getAllDisplays(),

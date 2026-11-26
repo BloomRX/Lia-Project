@@ -39,13 +39,14 @@ export function createAvatarView(canvas) {
   let model
   let bounds
   let disposed = false
+  let renderingEnabled = true
   let mixer
   let avatar
   let timer
   let previousFrame
 
   function render() {
-    if (!bounds || !canvas.clientWidth || !canvas.clientHeight)
+    if (!renderingEnabled || !bounds || !canvas.clientWidth || !canvas.clientHeight)
       return
     const center = bounds.getCenter(new Vector3())
     const size = bounds.getSize(new Vector3())
@@ -70,7 +71,7 @@ export function createAvatarView(canvas) {
 
   function updateAnimation() {
     stopAnimation()
-    if (!mixer || document.hidden)
+    if (!renderingEnabled || !mixer || document.hidden)
       return
     previousFrame = performance.now()
     timer = setInterval(() => {
@@ -100,6 +101,14 @@ export function createAvatarView(canvas) {
   const resize = new ResizeObserver(render)
   resize.observe(canvas)
   return {
+    setRenderingEnabled(enabled) {
+      if (disposed || renderingEnabled === enabled)
+        return
+      renderingEnabled = enabled
+      if (enabled)
+        render()
+      updateAnimation()
+    },
     async load(bytes) {
       validateLocalAvatar(bytes)
       const gltf = await loader.parseAsync(bytes, '')
