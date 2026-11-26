@@ -127,6 +127,17 @@ jobs:
           $version = (Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json).version
           $installer = Get-Item -LiteralPath "dist/windows-native-preview/LiaPreviewSetup-$version-x64.exe"
           .\scripts\check-native-install.ps1 -Installer $installer.FullName -EvidenceRoot $env:RUNNER_TEMP -RequireIndependent -DirectStageConversation -RequireAttribution -RequireBranding
+      - name: Validar atualização privada do perfil
+        if: ${{ !cancelled() && steps.build-launcher.outcome == 'success' }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          Set-Location (Join-Path $env:LIA_STANDALONE 'lia/desktop')
+          $version = [version](Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json).version
+          $next = "0.0.$($version.Build + 1)"
+          $previous = Get-Item -LiteralPath "dist/windows-native-preview/LiaPreviewSetup-$version-x64.exe"
+          node scripts/package-windows.mjs --internal-test "--upgrade-test-version=$next"
+          $candidate = Get-Item -LiteralPath "dist/windows-native-preview/LiaPreviewSetup-$next-x64.exe"
+          .\scripts\check-native-install.ps1 -PreviousInstaller $previous.FullName -Installer $candidate.FullName -EvidenceRoot $env:RUNNER_TEMP -RequireIndependent -RequireAttribution -RequireBranding
       - name: Preservar evidências do Stage
         if: always()
         uses: actions/upload-artifact@v7

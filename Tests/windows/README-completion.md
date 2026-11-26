@@ -102,3 +102,9 @@ Para um ensaio privado de atualização, gere um instalador com versão superior
 do repositório. Passe os dois instaladores ao gate com `-PreviousInstaller` e
 `-Installer`. O gate confere a versão instalada, a troca do Stage e a
 preservação do perfil sintético e da credencial DPAPI.
+
+
+O CI também testa uma atualização entre duas versões geradas da mesma
+revisão. A versão do Stage acompanha a do Launcher na candidata de ensaio.
+O relatório do CI cobre substituição e preservação do perfil no NSIS.
+Migrações entre revisões de código exigem os dois instaladores correspondentes.

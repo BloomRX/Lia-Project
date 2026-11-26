@@ -52,7 +52,7 @@ export function validateInputs(inputs, { internalTest = false } = {}) {
     requireFile(join(inputs.electron, file), 'Runtime Electron Windows e suas licenças')
 }
 
-export function stageConfiguration(inputs) {
+export function stageConfiguration(inputs, upgradeTestVersion) {
   return {
     extends: null,
     appId: 'ai.lia.stage',
@@ -68,6 +68,7 @@ export function stageConfiguration(inputs) {
     extraResources: [],
     extraMetadata: {
       name: 'lia-stage',
+      ...(upgradeTestVersion && { version: upgradeTestVersion }),
       main: 'out/main/index.js',
       repository: null,
       homepage: null,
@@ -170,7 +171,7 @@ export function packageWindows({ checkOnly = false, unpacked = false, internalTe
   const temporary = mkdtempSync(join(tmpdir(), 'lia-package-'))
   try {
     const config = join(temporary, 'stage.json')
-    writeFileSync(config, JSON.stringify(stageConfiguration(inputs), null, 2))
+    writeFileSync(config, JSON.stringify(stageConfiguration(inputs, upgradeTestVersion), null, 2))
     builder(inputs, inputs.stage, ['--config', config, '--win', '--x64', '--dir'])
     validatePackagedStage(inputs.stageOutput, inputs.electron)
     validateArchive(inputs.builder, join(inputs.stageOutput, 'resources/app.asar'))
