@@ -2,6 +2,7 @@ import type { LiaProductConfigRead } from '@lia/core/product/config'
 
 import type { TransportSnapshot } from '../../../core/src/transports/contracts.ts'
 import type { LiaMemoryResult } from '../../../core/src/memory/contracts.ts'
+import type { CognitiveTurn } from './stage-cognition.ts'
 import type { createStageHistory } from './stage-history.ts'
 
 import { createHash } from 'node:crypto'
@@ -10,10 +11,10 @@ import { brainRequirementForChatTurn, createProductionBrainAutomaticPolicy, crea
 
 import { credentialForDestination } from '../../../core/src/credentials/destination.ts'
 import { LIA_MEMORY_LIMITS } from '../../../core/src/memory/contracts.ts'
-import { LIA_DEFAULT_PERSONA, renderLiaPersonaDescription, renderLiaPersonaPersonality, renderLiaPersonaScenario } from '../../../core/src/persona/default.ts'
 import { findLiaAiProviderByStageProviderId, ProviderError, ProviderRegistry, ProviderRuntime } from '../../../core/src/providers/index.ts'
 import { maxStageImageBytes } from '../shared/chat-image.ts'
 import { chatWithLocalClock } from './stage-clock-tool.ts'
+import { composeStageContext, decideStageTurn, defaultPersonality } from './stage-cognition.ts'
 
 interface StageChatDependencies {
   fetch?: typeof globalThis.fetch
@@ -27,17 +28,13 @@ interface StageChatDependencies {
 
 export type StageChatResult
   = | { ok: true, text: string, historyUnavailable?: true }
+    | { ok: false, code: 'capability-suggested' | 'confirmation-required', capability: 'local-clock' }
     | { ok: false, code: 'invalid' | 'image-invalid' | 'image-unavailable' | 'configuration' | 'persona-unavailable' | 'tool-unavailable' | 'unavailable' | 'cancelled' | 'busy' | 'credentials' | 'timeout' | 'rate-limit' }
 
 const historyTurns = 6
 const brainCatalog = createProductionBrainCatalog()
 const automaticPolicy = createProductionBrainAutomaticPolicy()
 const pngSignature = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
-const defaultPersonaPrompt = [
-  renderLiaPersonaDescription(LIA_DEFAULT_PERSONA),
-  renderLiaPersonaPersonality(LIA_DEFAULT_PERSONA, { includeUserName: false }),
-  renderLiaPersonaScenario(LIA_DEFAULT_PERSONA),
-].join('\n\n')
 
 function imageContent(input: unknown) {
   if (!(input instanceof Uint8Array) || input.byteLength < 8 || input.byteLength > maxStageImageBytes)
@@ -49,13 +46,8 @@ function imageContent(input: unknown) {
   return `data:image/${png ? 'png' : 'jpeg'};base64,${Buffer.from(input).toString('base64')}`
 }
 
-interface Turn {
-  user: string
-  assistant: string
-}
-
 export function createStageChat({ fetch, storage, recallMemory, readCredential, readPersona, readProduct, readTransports }: StageChatDependencies) {
-  let history: { route: string, turns: Turn[] } | undefined
+  let history: { route: string, turns: CognitiveTurn[] } | undefined
 
   function unavailableConfiguration(): StageChatResult {
     history = undefined
@@ -116,13 +108,14 @@ export function createStageChat({ fetch, storage, recallMemory, readCredential, 
     return { providerId, modelId, requestModel, definition, transportId: record.id, destination, customCard }
   }
 
-  async function send(input: unknown, signal: AbortSignal, image?: unknown, allowClock?: unknown): Promise<StageChatResult> {
+  async function send(input: unknown, signal: AbortSignal, image?: unknown, intent?: unknown, confirmClock?: () => Promise<boolean>): Promise<StageChatResult> {
     if (typeof input !== 'string' || input.length > 8_000 || !input.trim())
       return { ok: false, code: 'invalid' }
     const attachment = image === undefined ? undefined : imageContent(image)
     if (image !== undefined && !attachment)
       return { ok: false, code: 'image-invalid' }
-    if (allowClock !== undefined && typeof allowClock !== 'boolean')
+    const decision = decideStageTurn(intent)
+    if (decision === 'invalid')
       return { ok: false, code: 'invalid' }
     try {
       signal.throwIfAborted()
@@ -130,10 +123,32 @@ export function createStageChat({ fetch, storage, recallMemory, readCredential, 
       if (typeof initial === 'string')
         return initial === 'configuration' ? unavailableConfiguration() : { ok: false, code: initial }
       const { providerId, modelId, requestModel, definition, destination, customCard } = initial
-      if (allowClock && (!definition.localOnly || attachment))
+      if (decision !== 'respond' && (!definition.localOnly || attachment))
         return { ok: false, code: 'tool-unavailable' }
-      const prompt = customCard ? await readPersona?.(customCard) : defaultPersonaPrompt
-      if (!prompt)
+      const sameRoute = async () => {
+        const currentRoute = await resolveRoute(Boolean(attachment))
+        return typeof currentRoute !== 'string' && currentRoute.transportId === initial.transportId
+          && currentRoute.providerId === providerId && currentRoute.modelId === modelId
+          && currentRoute.requestModel === requestModel && currentRoute.destination.href === destination.href
+          && currentRoute.customCard === customCard
+      }
+      signal.throwIfAborted()
+      if (decision === 'suggest')
+        return { ok: false, code: 'capability-suggested', capability: 'local-clock' }
+      if (decision === 'confirm') {
+        if (!confirmClock)
+          return { ok: false, code: 'confirmation-required', capability: 'local-clock' }
+        if (!await confirmClock())
+          return { ok: false, code: 'cancelled' }
+        signal.throwIfAborted()
+        const unchangedAfterConfirmation = await sameRoute()
+        signal.throwIfAborted()
+        if (!unchangedAfterConfirmation)
+          return unavailableConfiguration()
+      }
+      const useClock = decision !== 'respond'
+      const personality = customCard ? await readPersona?.(customCard) : defaultPersonality
+      if (!personality)
         return { ok: false, code: 'persona-unavailable' }
       const scope = [providerId, modelId, destination.href]
       if (customCard)
@@ -149,13 +164,6 @@ export function createStageChat({ fetch, storage, recallMemory, readCredential, 
       signal.throwIfAborted()
       // Preparation can yield while the Launcher edits the route. Ask the user to
       // retry a draft rather than silently sending it to another destination.
-      const sameRoute = async () => {
-        const currentRoute = await resolveRoute(Boolean(attachment))
-        return typeof currentRoute !== 'string' && currentRoute.transportId === initial.transportId
-          && currentRoute.providerId === providerId && currentRoute.modelId === modelId
-          && currentRoute.requestModel === requestModel && currentRoute.destination.href === destination.href
-          && currentRoute.customCard === customCard
-      }
       const unchanged = await sameRoute()
       signal.throwIfAborted()
       if (!unchanged)
@@ -171,27 +179,17 @@ export function createStageChat({ fetch, storage, recallMemory, readCredential, 
       const config = { providerId, baseUrl: destination.href }
       const request: Parameters<typeof runtime.chat>[1] = {
         model: requestModel,
-        messages: [
-          { role: 'system', content: context ? `${prompt}\n\n${context}` : prompt },
-          ...current.turns.flatMap(turn => [
-            { role: 'user', content: turn.user },
-            { role: 'assistant', content: turn.assistant },
-          ]),
-          { role: 'user', content: attachment ? [
-            { type: 'text', text },
-            { type: 'image_url', image_url: { url: attachment } },
-          ] : text },
-        ],
+        messages: composeStageContext(personality, context, current.turns, text, attachment),
       }
-      const response = allowClock
+      const response = useClock
         ? await chatWithLocalClock(runtime, config, request, signal, sameRoute)
         : await runtime.chat(config, request, { signal })
       signal.throwIfAborted()
       if (credential && response.text.includes(credential))
         return { ok: false, code: 'unavailable' }
-      if (!context && !attachment && !allowClock)
+      if (!context && !attachment && !useClock)
         current.turns = [...current.turns, { user: text, assistant: response.text.slice(0, 8_000) }].slice(-historyTurns)
-      const turn = { route, user: text, assistant: response.text.slice(0, 8_000), reusable: !context && !allowClock }
+      const turn = { route, user: text, assistant: response.text.slice(0, 8_000), reusable: !context && !useClock }
       if (storage && !attachment && (!credential || !text.includes(credential))) {
         try {
           await storage.append(turn)

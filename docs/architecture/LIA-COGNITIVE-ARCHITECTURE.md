@@ -23,6 +23,44 @@ planejamento autônomo permanecem metas de arquitetura. A visão adiante
 continua abrangendo percepção, desktop, jogos e integrações conforme
 permissões e critérios de validação próprios.
 
+## Cognitive Foundation V1 no Stage
+
+O Main do Stage coordena cada mensagem. Valida o destino e o modelo da
+configuração do produto, recupera as trocas elegíveis e consulta a interface
+de memória existente apenas para IA local. Compõe o contexto com identidade,
+personalidade, memória autorizada, histórico e entrada atual. Revalida a rota
+antes de consultar credenciais ou enviar a requisição e registra o resultado
+segundo as preferências de histórico.
+
+A identidade Lia tem um registro versionado no código do produto. É recomposta
+em cada mensagem e permanece estável ao reabrir o Stage ou trocar de provedor,
+modelo ou cartão. O perfil de personalidade continua salvo no armazenamento
+existente. Cartões importados e traços personalizados ficam restritos à IA
+local. A configuração do provedor continua independente desses arquivos.
+
+A política do turno distingue resposta, sugestão, solicitação de confirmação e
+encaminhamento. O relógio é a capacidade executável do V1, apenas em texto com
+IA local. A caixa do Stage solicita confirmação nativa, com Cancelar como padrão.
+Só a confirmação no Main autoriza oferecer a ferramenta ao modelo nesse turno.
+A sugestão é um resultado tipado do Main, coberto por teste focado. O Stage ainda não oferece um controle para solicitá-la. O modelo pode responder sem usar
+a ferramenta. Uma chamada do relógio precisa corresponder ao contrato de
+argumentos e passar por nova verificação da rota.
+
+O Agent Hub independente publica o índice ativo v1 em
+`Comum/Capacidades/index.json` sob a raiz do Hub. O Main aceita somente o
+catálogo ativo e projeta ID, nome e tipo para a interface. O catálogo é informativo,
+sem autoridade para executar, conceder permissões ou incluir conteúdo no contexto
+do modelo. O teste do publicador usou a revisão `fbf6351b` do Hub. A conversa
+continua disponível quando o índice está ausente. A delegação depende de um
+contrato futuro de execução supervisionada.
+
+O gate `node lia/desktop/scripts/check-native-history.mjs` passou no Electron
+Windows com HTTP local sintético. Também passou com `--agent-hub` e um índice
+publicado pelo Hub. A execução confirmou identidade com cartão importado,
+restauração dos traços, memória, histórico e autorização de relógio. As respostas
+dos diálogos foram injetadas na automação. Os testes focados cobriram a seleção de
+modelo e a rota HTTPS com requisição simulada.
+
 ## 1. Visão: uma inteligência digital pessoal
 
 A Lia deve evoluir para uma inteligência digital pessoal persistente: uma presença com identidade reconhecível, personalidade consistente, memória controlável, percepção contextual e capacidade de raciocinar, planejar, decidir e agir por ferramentas autorizadas.

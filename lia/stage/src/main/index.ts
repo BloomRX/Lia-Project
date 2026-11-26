@@ -352,10 +352,27 @@ async function main(): Promise<void> {
     const controller = new AbortController()
     active = controller
     try {
-      const result = await send(input, controller.signal, image, allowClock)
+      const owner = window
+      const intent = allowClock === true ? { capability: 'local-clock', mode: 'request' } : allowClock
+      const result = await send(input, controller.signal, image, intent, async () => {
+        const locale = await readLocale()
+        if (!owner || controller.signal.aborted || !authorized(event))
+          return false
+        const { response } = await dialog.showMessageBox(owner, {
+          type: 'question', title: 'Lia',
+          message: stageText(locale, 'Consultar a data e a hora deste computador nesta mensagem?'),
+          buttons: [stageText(locale, 'Cancelar'), stageText(locale, 'Consultar')],
+          defaultId: 0, cancelId: 0, noLink: true,
+          signal: controller.signal,
+        })
+        return response === 1 && !controller.signal.aborted && Boolean(authorized(event))
+      })
       if (result.ok)
         updateAnswer(result.text)
       return result
+    }
+    catch {
+      return { ok: false, code: controller.signal.aborted ? 'cancelled' : 'unavailable' }
     }
     finally {
       active = undefined

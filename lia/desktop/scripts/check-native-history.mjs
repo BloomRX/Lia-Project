@@ -252,7 +252,11 @@ try {
   })
   await page.getByText('Personalidade ativa: Cartão de teste', { exact: true }).waitFor()
   await submit(page, 'Conversa com cartão', 6)
-  assert.deepEqual(requests[5].messages, [{ role: 'system', content: 'Tom da personalidade de teste' }, { role: 'user', content: 'Conversa com cartão' }])
+  const identity = 'Você é Lia, a companheira digital pessoal deste aplicativo.'
+  assert.ok(requests[1].messages[0].content.startsWith(identity))
+  assert.ok(requests[5].messages[0].content.startsWith(identity))
+  assert.match(requests[5].messages[0].content, /Tom da personalidade de teste/)
+  assert.deepEqual(requests[5].messages.slice(1), [{ role: 'user', content: 'Conversa com cartão' }])
   await page.screenshot({ path: join(root, 'personality.png'), fullPage: true })
   await app.close()
   app = await launch()
@@ -320,10 +324,26 @@ try {
   assert.equal(await page.getByRole('spinbutton', { name: 'Energia' }).inputValue(), '20')
   assert.equal(await page.getByLabel('Contexto base', { exact: true }).inputValue(), 'serious')
   await page.screenshot({ path: join(root, 'traits.png'), fullPage: true })
-  const clock = page.getByRole('checkbox', { name: 'Permitir consulta à data e hora deste computador nesta mensagem' })
+  const clock = page.getByRole('checkbox', { name: 'Solicitar consulta à data e hora deste computador nesta mensagem' })
   assert.equal(await clock.isChecked(), false)
-  await clock.check()
+  const confirmClock = response => app.evaluate(({ dialog }, choice) => {
+    dialog.showMessageBox = async (owner, options) => {
+      if (!owner || options.defaultId !== 0 || options.cancelId !== 0 || options.buttons[1] !== 'Consultar')
+        throw new Error('Unexpected clock confirmation contract')
+      return { response: choice }
+    }
+  }, response)
   const callIndex = requests.length
+  await confirmClock(0)
+  await clock.check()
+  await page.getByRole('textbox', { name: 'Mensagem' }).fill('Que horas são?')
+  await page.getByRole('button', { name: 'Enviar', exact: true }).click()
+  await page.getByRole('button', { name: 'Enviar', exact: true }).waitFor()
+  await page.waitForFunction(() => !document.querySelector('#allow-clock').disabled)
+  assert.equal(requests.length, callIndex)
+  assert.equal(await page.getByRole('textbox', { name: 'Mensagem' }).inputValue(), 'Que horas são?')
+  await confirmClock(1)
+  await clock.check()
   await submit(page, 'Que horas são?', callIndex + 2)
   assert.equal(requests[callIndex].messages.at(-1).role, 'user')
   assert.deepEqual(requests[callIndex + 1].messages.at(-1).tool_call_id, 'clock_fixture')
@@ -378,6 +398,8 @@ try {
   assert.equal(await page.getByText(`Lia: Resposta ${requests.length}`, { exact: true }).count(), 1)
   const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, legacyTextImported: true, cancellationPreservedHistory: true, cleared: true, clearDisabledWhenEmpty: true, rateLimitSanitized: true, refusedImageWithoutVision: true, conversationsIsolated: true, selectionRestored: true, deletionConfirmed: true, builtInPersonaInRequest: true, importedPersonaInRequest: true, importedPersonaRestored: true, personaContextIsolated: true, kokoroSelectedByLauncher: Boolean(kokoroVoice), kokoroVoice: kokoroVoice ?? (withVoice ? 'default' : null), localKokoroMutedPlayback: withVoice ? 'cancelled, retried, played and stopped' : null, autoPlay: withVoice ? 'opt-in, persisted, played, opted out' : null, customizedTraitsPersisted: true }
   report.localClockRoundTrip = true
+  report.clockConfirmation = { dialogResponse: 'injected', deniedWithoutRequest: true, acceptedRoundTrip: true }
+  report.identityStableWithImportedPersona = true
   report.singleMessageRemoved = { dialogResponse: 'injected', remainingReplyVisible: true }
   report.memoryClear = { dialogResponse: 'injected', cancelPreservedNote: true, clearPreservedConversation: true, focusRestored: true }
   report.hubCatalog = { source: withPublishedHub ? 'published Hub index' : 'synthetic index', listed: listedHubCapabilities }

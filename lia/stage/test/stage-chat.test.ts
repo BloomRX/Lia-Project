@@ -81,6 +81,44 @@ test('clock permission is opt-in and unknown tool calls cannot trigger a follow-
   assert.equal(requests.length, 2)
 })
 
+test('suggests or requests confirmation without dispatching a model or capability', async () => {
+  const send = fixture([{ ...record, baseUrl: 'http://127.0.0.1:1234/v1' }])
+  const signal = new AbortController().signal
+  assert.deepEqual(await send('Hora?', signal, undefined, { capability: 'local-clock', mode: 'suggest' }),
+    { ok: false, code: 'capability-suggested', capability: 'local-clock' })
+  assert.deepEqual(await send('Hora?', signal, undefined, { capability: 'local-clock', mode: 'request' }),
+    { ok: false, code: 'confirmation-required', capability: 'local-clock' })
+  assert.deepEqual(await send('Hora?', signal, undefined, { capability: 'hub-tool', mode: 'request' }),
+    { ok: false, code: 'invalid' })
+  assert.deepEqual(await send('Hora?', signal, undefined, { capability: 'local-clock', mode: 'request', confirmed: true }),
+    { ok: false, code: 'invalid' })
+})
+
+test('does not dispatch or recall private context if the local route changes during confirmation', async () => {
+  const local = { ...record, baseUrl: 'http://127.0.0.1:1234/v1' }
+  let requests = 0
+  let recalls = 0
+  const send = createStageChat({
+    async fetch() { requests++; return new Response() },
+    async recallMemory() { recalls++; return { ok: true, value: 'Privado' } },
+    async readProduct() {
+      return { filePath: '', status: 'ok', value: { provider: { chat: { preferred: { providerId: 'local-chat', modelId: 'test-model' } } } } }
+    },
+    async readTransports() {
+      return { schemaVersion: 1, revision: 1, records: [local], tombstones: [], migration: { version: 1, imported: [] } }
+    },
+  })
+  const signal = new AbortController().signal
+  const intent = { capability: 'local-clock', mode: 'request' }
+  const result = await send('Hora?', signal, undefined, intent, async () => {
+    local.baseUrl = 'http://127.0.0.1:4321/v1'
+    return true
+  })
+  assert.deepEqual(result, { ok: false, code: 'configuration' })
+  assert.equal(requests, 0)
+  assert.equal(recalls, 0)
+})
+
 test('does not send a clock result after the local transport is removed', async () => {
   const local = { ...record, baseUrl: 'http://127.0.0.1:1234/v1' }
   let requests = 0
@@ -199,6 +237,8 @@ test('uses a bound chat credential only for the configured HTTPS origin', async 
       return { schemaVersion: 1, revision: 1, records: [groq], tombstones: [], migration: { version: 1, imported: [] } }
     },
   })
+  assert.deepEqual(await send('Hora?', new AbortController().signal, undefined, { capability: 'local-clock', mode: 'request' }),
+    { ok: false, code: 'tool-unavailable' })
   const submit = () => send('oi', new AbortController().signal)
   assert.deepEqual(await submit(), { ok: true, text: 'Resposta' })
   const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
@@ -224,7 +264,8 @@ test('uses a bound chat credential only for the configured HTTPS origin', async 
   groq.baseUrl = 'http://127.0.0.1/v1'
   assert.deepEqual(await submit(), { ok: false, code: 'configuration' })
   assert.equal(requests[2]?.model, 'test-model')
-  assert.equal(typeof requests[0]?.messages[0]?.content, 'string')
+  assert.match(String(requests[0]?.messages[0]?.content), /^Você é Lia, a companheira digital pessoal deste aplicativo\./)
+  assert.equal(requests[0]?.messages[0]?.content, requests[1]?.messages[0]?.content)
   assert.match(String(requests[0]?.messages[0]?.content), /Preset: tsundere/)
   assert.doesNotMatch(String(requests[0]?.messages[0]?.content), /Dirija-se ao usuário pelo nome/)
   assert.ok(!JSON.stringify(requests[2]).includes('base64'))
@@ -272,6 +313,8 @@ test('carries completed turns and keeps history out of a different model', async
     modelId = 'new-model'
     assert.equal((await submit('Novo modelo')).ok, true)
     assert.equal(requests[2]!.model, 'new-model')
+    assert.match(requests[2]!.messages[0]!.content, /^Você é Lia, a companheira digital pessoal deste aplicativo\./)
+    assert.equal(requests[2]!.messages[0]!.content, requests[0]!.messages[0]!.content)
     assert.deepEqual(requests[2]!.messages.slice(1), [{ role: 'user', content: 'Novo modelo' }])
     useMemory = true
     assert.equal((await submit('Com memória')).ok, true)
