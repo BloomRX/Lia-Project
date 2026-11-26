@@ -176,6 +176,13 @@ async function run() {
     assert.equal(JSON.parse(await readFile(join(root, 'lia-product.json'), 'utf8')).presence.hideOnHover, true)
     await chat.getByRole('button', { name: 'Alternar ocultação ao passar o mouse', exact: true }).click()
     await chat.getByText('Presença atualizada.', { exact: true }).waitFor()
+    const fullscreenToggle = chat.getByRole('button', { name: 'Ocultar avatar quando o chat estiver em tela cheia' })
+    assert.equal(await fullscreenToggle.getAttribute('aria-pressed'), 'true')
+    await fullscreenToggle.click()
+    await chat.getByRole('button', { name: 'Ocultar avatar quando o chat estiver em tela cheia', pressed: false }).waitFor()
+    assert.equal(JSON.parse(await readFile(join(root, 'lia-product.json'), 'utf8')).presence.pauseOnFullscreen, false)
+    await fullscreenToggle.click()
+    await chat.getByRole('button', { name: 'Ocultar avatar quando o chat estiver em tela cheia', pressed: true }).waitFor()
     const stageFullscreen = await app.evaluate(async ({ BrowserWindow }) => {
       const windows = BrowserWindow.getAllWindows()
       const overlay = windows.find(window => window.webContents.getURL().endsWith('/presence.html'))
@@ -242,7 +249,7 @@ async function run() {
     const [reopened] = await Promise.all([app.waitForEvent('window', { timeout: 10_000 }), openButton.click()])
     await chat.getByText('Avatar aberto no desktop.', { exact: true }).waitFor()
     await Promise.all([reopened.waitForEvent('close', { timeout: 10_000 }), chat.close()])
-    const report = { syntheticVrm: true, packagedAvatarOpened: true, live2dLimitationVisible: true, personaUnchanged: true, animatedFramesDiffer: true, invalidOverlayRejected: true, externalTextureRejected: true, moved, pinned: true, home: true, syntheticHover: hover, stageFullscreen, connectedDisplays: displays.displays.length, secondDisplayPlacement: secondDisplay ? 'PASS' : 'NOT RUN', syntheticDisplayRecovery: displayRecovery, hidden: true, closedWithChat: true }
+    const report = { syntheticVrm: true, packagedAvatarOpened: true, live2dLimitationVisible: true, personaUnchanged: true, animatedFramesDiffer: true, invalidOverlayRejected: true, externalTextureRejected: true, moved, pinned: true, home: true, syntheticHover: hover, stageFullscreen, fullscreenPreferencePersisted: true, connectedDisplays: displays.displays.length, secondDisplayPlacement: secondDisplay ? 'PASS' : 'NOT RUN', syntheticDisplayRecovery: displayRecovery, hidden: true, closedWithChat: true }
     await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
     console.log(JSON.stringify(report))
   }

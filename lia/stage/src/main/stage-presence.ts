@@ -128,7 +128,7 @@ export function createStagePresence(options: {
       if (!result?.ok)
         return undefined
       const { config, displays } = result.state
-      return { displays, monitorId: config.monitorId, allMonitors: config.allMonitors }
+      return { displays, monitorId: config.monitorId, allMonitors: config.allMonitors, pauseOnFullscreen: config.pauseOnFullscreen }
     },
     takeAsset(event: Electron.IpcMainInvokeEvent) {
       if (!ownsOverlay(event))
@@ -155,7 +155,7 @@ export function createStagePresence(options: {
         const monitorId = typeof monitor === 'number' ? monitor : null
         return (await current.set({ ...result.state.config, monitorId, allMonitors: monitor === 'all' })).ok
       }
-      if (action !== 'paused' && action !== 'pinned' && action !== 'hideOnHover')
+      if (action !== 'paused' && action !== 'pinned' && action !== 'hideOnHover' && action !== 'pauseOnFullscreen')
         return false
       return (await current.set({ ...result.state.config, [action]: !result.state.config[action] })).ok
     },

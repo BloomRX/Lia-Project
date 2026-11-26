@@ -75,6 +75,7 @@ const english = new Map([
   ['Ocultar do desktop', 'Hide from desktop'],
   ['Pausar ou retomar', 'Pause or resume'],
   ['Fixar ou soltar', 'Pin or unpin'],
+  ['Ocultar avatar quando o chat estiver em tela cheia', 'Hide avatar when chat is fullscreen'],
   ['Alternar ocultação ao passar o mouse', 'Toggle hide on hover'],
   ['Monitor do avatar', 'Avatar display'],
   ['Monitor atual', 'Current display'],

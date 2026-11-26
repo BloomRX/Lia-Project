@@ -76,6 +76,7 @@ async function refreshMonitors() {
   const state = await window.liaStagePresence.displays()
   if (!state)
     throw new Error('presence-displays')
+  document.querySelector('[data-presence="pauseOnFullscreen"]').setAttribute('aria-pressed', String(state.pauseOnFullscreen))
   const options = [
     new Option(t('Monitor atual'), 'current'),
     new Option(t('Todos os monitores'), 'all'),
@@ -121,6 +122,8 @@ for (const command of commands) {
   command.addEventListener('click', () => void operate(async () => {
     if (!await window.liaStagePresence.command(command.dataset.presence))
       throw new Error('presence')
+    if (command.dataset.presence === 'pauseOnFullscreen')
+      await refreshMonitors()
     status.textContent = t('Presença atualizada.')
   }))
 }
