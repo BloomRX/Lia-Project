@@ -135,6 +135,14 @@ Para configurar outra rota de síntese, abra **Voz → Síntese compatível
 com OpenAI** no Launcher e informe endereço, modelo, voz e chave.
 O Stage pede autorização para cada envio de texto à rota. A opção
 **Voltar ao motor local** muda a seleção e preserva a conexão salva.
+Para usar um AllTalk V2 que você administra, abra **Voz → Voz personalizada
+em servidor local**. Inicie o serviço em `127.0.0.1:7851` e coloque na
+biblioteca dele um WAV que você tem permissão de usar. **Consultar vozes
+disponíveis** recupera os nomes dos WAVs. Escolha um nome, selecione a voz e
+use **Ouvir resposta** no Stage. A síntese envia o texto da resposta apenas
+ao serviço local e informa quando a voz fica indisponível. A biblioteca
+importada no Launcher mantém seus arquivos no perfil da Lia. O AllTalk lê
+sua própria biblioteca.
 No caminho autenticado, o Main lê o cofre compartilhado e exige
 HTTPS e chave vinculada ao provedor, à origem e à finalidade de chat.
 Esse caminho passou em testes com credencial sintética e transporte
