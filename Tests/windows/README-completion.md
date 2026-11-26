@@ -94,3 +94,11 @@ O chat continua sintético. A síntese usa o serviço escolhido pelo operador e
 o gate conserva o áudio silenciado. Registre à parte qual motor está ativo
 no AllTalk e a avaliação audível da voz. O modo real não encerra o servidor
 do operador nem gera captura com o nome do WAV.
+
+
+Para um ensaio privado de atualização, gere um instalador com versão superior
+à anterior usando `node lia/desktop/scripts/package-windows.mjs --internal-test
+--upgrade-test-version=0.0.3`. O número serve ao teste e fica fora do manifesto
+do repositório. Passe os dois instaladores ao gate com `-PreviousInstaller` e
+`-Installer`. O gate confere a versão instalada, a troca do Stage e a
+preservação do perfil sintético e da credencial DPAPI.

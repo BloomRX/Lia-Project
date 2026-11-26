@@ -117,6 +117,9 @@ try {
   $report['version'] = (Get-Item -LiteralPath $launcher).VersionInfo.ProductVersion
   $report['stageSha256'] = (Get-FileHash -LiteralPath $stageArchive -Algorithm SHA256).Hash
   if ($PreviousInstaller) {
+    if ([version]$report.version -le [version]$report.previousVersion) {
+      throw 'A versão do instalador precisa ser posterior à versão instalada.'
+    }
     $report['replacement'] = $report.stageSha256 -ne $report.previousStageSha256
     if (!$report.replacement) { throw 'O Stage instalado não mudou. Confira se os instaladores são de builds distintos.' }
   }

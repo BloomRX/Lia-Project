@@ -76,10 +76,13 @@ export function stageConfiguration(inputs) {
   }
 }
 
-export function nativeLauncherConfiguration(inputs) {
+export function nativeLauncherConfiguration(inputs, upgradeTestVersion) {
+  if (upgradeTestVersion !== undefined && !/^0\.0\.(?:[2-9]|[1-9][0-9]{1,3})$/.test(upgradeTestVersion))
+    throw new Error('Informe uma versão de ensaio a partir de 0.0.2 no formato 0.0.N.')
   return {
     ...launcherConfiguration,
     win: { ...launcherConfiguration.win, icon: inputs.icon },
+    extraMetadata: { ...launcherConfiguration.extraMetadata, ...(upgradeTestVersion && { version: upgradeTestVersion }) },
     extraResources: launcherConfiguration.extraResources.map(resource =>
       resource.to === 'stage' ? { ...resource, from: inputs.stageOutput } : resource),
   }
@@ -154,8 +157,9 @@ function builder(inputs, cwd, args) {
     throw new Error(`electron-builder falhou (código ${result.status ?? 'indisponível'}).`)
 }
 
-export function packageWindows({ checkOnly = false, unpacked = false, internalTest = false } = {}) {
+export function packageWindows({ checkOnly = false, unpacked = false, internalTest = false, upgradeTestVersion } = {}) {
   const inputs = packagingInputs()
+  const launcher = nativeLauncherConfiguration(inputs, upgradeTestVersion)
   validateInputs(inputs, { internalTest })
   if (checkOnly) {
     process.stdout.write('Pré-requisitos de empacotamento disponíveis. Instalador e licenças de assets ainda exigem validação.\n')
@@ -171,7 +175,7 @@ export function packageWindows({ checkOnly = false, unpacked = false, internalTe
     validatePackagedStage(inputs.stageOutput, inputs.electron)
     validateArchive(inputs.builder, join(inputs.stageOutput, 'resources/app.asar'))
     const launcherConfig = join(temporary, 'launcher.json')
-    writeFileSync(launcherConfig, JSON.stringify(nativeLauncherConfiguration(inputs), null, 2))
+    writeFileSync(launcherConfig, JSON.stringify(launcher, null, 2))
     builder(inputs, inputs.launcher, [
       '--config',
       launcherConfig,
@@ -193,9 +197,15 @@ export function packageWindows({ checkOnly = false, unpacked = false, internalTe
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const args = process.argv.slice(2)
   try {
-    if (args.some(arg => !['--check', '--dir', '--internal-test', '--native'].includes(arg)))
-      throw new Error('Uso: node scripts/package-windows.mjs --internal-test [--check] [--dir]')
-    packageWindows({ checkOnly: args.includes('--check'), unpacked: args.includes('--dir'), internalTest: args.includes('--internal-test') })
+    const versions = args.filter(arg => arg.startsWith('--upgrade-test-version='))
+    if (versions.length > 1 || args.some(arg => !versions.includes(arg) && !['--check', '--dir', '--internal-test', '--native'].includes(arg)))
+      throw new Error('Uso: node scripts/package-windows.mjs --internal-test [--check] [--dir] [--upgrade-test-version=0.0.N]')
+    packageWindows({
+      checkOnly: args.includes('--check'),
+      unpacked: args.includes('--dir'),
+      internalTest: args.includes('--internal-test'),
+      upgradeTestVersion: versions[0]?.slice('--upgrade-test-version='.length),
+    })
   }
   catch (error) {
     // Standalone Node packaging must not depend on workspace TypeScript helpers.

@@ -89,6 +89,10 @@ test('default packaging requires no AIRI files and preserves the internal instal
   assert.equal(config.publish, null)
   assert.equal(config.nsis.deleteAppDataOnUninstall, false)
   assert.equal(config.nsis.perMachine, false)
+  assert.equal(config.extraMetadata.version, undefined)
+  assert.equal(nativeLauncherConfiguration(inputs, '0.0.3').extraMetadata.version, '0.0.3')
+  assert.throws(() => nativeLauncherConfiguration(inputs, '0.0.1'), /versão de ensaio/)
+  assert.throws(() => nativeLauncherConfiguration(inputs, '1.0.0'), /versão de ensaio/)
 })
 
 test('the packaged Launcher verifies runtime notices and rejects updater feeds in both desktop payloads', (t) => {
