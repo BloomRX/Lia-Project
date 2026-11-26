@@ -54,7 +54,11 @@ no gate `45621582056`. O CI seleciona `-DirectStageConversation` para
 exercitar, via Playwright, a conversa no executável instalado após validar
 o Launcher. O relatório marca `conversationThroughLauncher: false` nesse
 modo. Execute o gate padrão numa sessão Windows interativa para provar a
-troca na janela aberta pelo Launcher.
+troca na janela aberta pelo Launcher. Em `73825435`, o gate padrão local
+passou com `conversationThroughLauncher: true` e `conversationSource:
+synthetic-loopback`, confirmou a saída dos processos e desinstalou o
+pacote. O SHA-256 do instalador ensaiado foi
+`6E7E99113745F9302480BF7DA77BFBAEADE75046E49185F0BAE54B001BC29B28`.
 
 Para testar inferência no Stage instalado, execute o mesmo comando de
 instalação limpa com `-LocalModelPort <porta>` e `-LocalModel <id>`.
