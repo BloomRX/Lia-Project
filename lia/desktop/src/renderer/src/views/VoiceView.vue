@@ -35,6 +35,31 @@ const importName = ref('')
 const runtimeLocation = ref<any>(undefined)
 const speech = ref({ baseUrl: '', modelId: '', voiceId: '', apiKey: '', hasKey: false })
 const speechBusy = ref(false)
+const customSpeech = ref({ active: false, voiceId: '' })
+const customFeedback = ref('')
+const customSpeechServiceName = 'AllTalk V2'
+
+async function loadCustomSpeech() {
+  const options = await props.api?.customSpeechOptions?.()
+  if (options)
+    customSpeech.value = options
+}
+
+async function saveCustomSpeech() {
+  speechBusy.value = true
+  try {
+    if (!await props.api?.useCustomSpeech?.(customSpeech.value.voiceId))
+      throw new Error('custom-speech-save')
+    await Promise.all([loadCustomSpeech(), loadLocalSpeech()])
+    customFeedback.value = 'Voz personalizada selecionada.'
+  }
+  catch {
+    customFeedback.value = 'Não foi possível salvar a voz. Confira o nome do arquivo WAV.'
+  }
+  finally {
+    speechBusy.value = false
+  }
+}
 const speechFeedback = ref('')
 const localSpeech = ref<{ voices: string[], active: boolean, voiceId: string }>({ voices: [], active: false, voiceId: '' })
 const voiceLabels: Record<string, string> = { pf_dora: 'Dora', pm_alex: 'Alex', pm_santa: 'Santa' }
@@ -107,7 +132,7 @@ async function saveSpeech() {
     const { baseUrl, modelId, voiceId, apiKey } = speech.value
     if (!await props.api?.speechConnectionSave?.({ baseUrl, modelId, voiceId, ...(apiKey ? { apiKey } : {}) }))
       throw new Error('speech-save')
-    await Promise.all([loadSpeech(), loadLocalSpeech()])
+    await Promise.all([loadSpeech(), loadLocalSpeech(), loadCustomSpeech()])
     speechFeedback.value = 'Síntese compatível selecionada.'
   }
   catch {
@@ -125,7 +150,7 @@ async function useLocalSpeech(fromSettings = false) {
   try {
     const saved = await props.api?.useLocalSpeech?.(localSpeech.value.voiceId || undefined)
     if (saved)
-      await loadLocalSpeech()
+      await Promise.all([loadLocalSpeech(), loadCustomSpeech()])
     notice.value = saved ? 'Motor local selecionado.' : 'Não foi possível selecionar o motor local.'
   }
   catch {
@@ -146,7 +171,7 @@ async function reloadLocation() {
 }
 
 onMounted(async () => {
-  await Promise.all([loadSpeech(), loadTranscription()])
+  await Promise.all([loadSpeech(), loadTranscription(), loadCustomSpeech()])
   await reload()
   await loadLocalSpeech()
   await reloadLocation()
@@ -372,6 +397,18 @@ async function importVoice() {
         </fieldset>
       </form>
       <p class="feedback" role="status">{{ speechFeedback }}</p>
+    </details>
+    <details class="speech-settings">
+      <summary>Voz personalizada em servidor local</summary>
+      <p class="dim">Use uma voz WAV de que você tem permissão de uso. O servidor {{ customSpeechServiceName }} deve estar em execução neste computador, na porta 7851, com o arquivo na biblioteca dele.</p>
+      <form @submit.prevent="saveCustomSpeech">
+        <fieldset :disabled="speechBusy">
+          <label>Nome do arquivo WAV <input v-model.trim="customSpeech.voiceId" required maxlength="124" placeholder="minha-voz.wav"></label>
+          <button type="submit">Selecionar voz personalizada</button>
+        </fieldset>
+      </form>
+      <p v-if="customSpeech.active" class="dim">Voz personalizada ativa.</p>
+      <p class="feedback" role="status">{{ customFeedback }}</p>
     </details>
     <details class="speech-settings">
       <summary>Reconhecimento de fala compatível com OpenAI</summary>

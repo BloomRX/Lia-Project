@@ -1,6 +1,8 @@
 import { Buffer } from 'node:buffer'
 import { randomUUID } from 'node:crypto'
 
+import { isAllTalkVoiceFile } from '../../../core/src/providers/alltalk-speech.ts'
+
 /** AllTalk is an optional local service. A voice name refers to the service's own WAV library. */
 export function createLocalAllTalk(base: URL, request: typeof fetch = fetch) {
   const { protocol, hostname, username, password, pathname, search, hash, origin } = base
@@ -10,7 +12,7 @@ export function createLocalAllTalk(base: URL, request: typeof fetch = fetch) {
 
   return async (input: { text: string, voice: string, language?: string }, signal: AbortSignal) => {
     if (!input.text.trim() || input.text.length > 8_000
-      || !/^[\p{L}\p{N}][\p{L}\p{N} _.-]{0,119}\.wav$/iu.test(input.voice))
+      || !isAllTalkVoiceFile(input.voice))
       return { ok: false, code: 'unavailable' } as const
     const active = AbortSignal.any([signal, AbortSignal.timeout(60_000)])
     const sameOrigin = { redirect: 'error', credentials: 'omit', signal: active } as const

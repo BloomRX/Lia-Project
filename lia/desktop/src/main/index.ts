@@ -10,6 +10,7 @@ import { createWindowsUserCipher } from '@lia/core/secrets/windows-user-cipher'
 import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electron'
 import { statSync as physicalStatSync } from 'original-fs'
 
+import { allTalkSpeechProvider, isAllTalkVoiceFile } from '../../../core/src/providers/alltalk-speech.ts'
 import { createLiaDevflowAutorun } from './devflow-autorun'
 import { createLiaEventPublisher } from './event-publisher'
 import { registerLiaIpc } from './ipc'
@@ -222,6 +223,21 @@ async function bootstrap(): Promise<void> {
   ipcMain.handle('lia:voice:speech-save', (event, input: unknown) => ownsWindow(event) ? host.saveSpeechConnection(input).catch(() => false) : false)
   ipcMain.handle('lia:voice:transcription-connection', (event, local: unknown) => ownsWindow(event) && (local === undefined || typeof local === 'boolean') ? host.transcriptionConnection(local).catch(() => undefined) : undefined)
   ipcMain.handle('lia:voice:transcription-save', (event, input: unknown) => ownsWindow(event) ? host.saveTranscriptionConnection(input).catch(() => false) : false)
+  ipcMain.handle('lia:voice:speech-custom-options', async (event, ...args: unknown[]) => {
+    if (!ownsWindow(event) || args.length)
+      return undefined
+    const selected = (await host.productSnapshot())?.voice?.tts?.preferred
+    return selected?.providerId === allTalkSpeechProvider && isAllTalkVoiceFile(selected.voiceId)
+      ? { active: true, voiceId: selected.voiceId }
+      : { active: false, voiceId: '' }
+  })
+  ipcMain.handle('lia:voice:speech-custom-save', async (event, ...args: unknown[]) => {
+    const [voiceId] = args
+    if (!ownsWindow(event) || args.length !== 1 || !isAllTalkVoiceFile(voiceId))
+      return false
+    const result = await host.updateConfig({ update: { voice: { tts: { preferred: { providerId: allTalkSpeechProvider, voiceId } } } } })
+    return result.status === 'ok'
+  })
   ipcMain.handle('lia:voice:speech-local-options', async event => {
     if (!ownsWindow(event))
       return undefined

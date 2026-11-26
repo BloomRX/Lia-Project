@@ -5,6 +5,7 @@ import { readVoiceEnabledConfig, readVoiceEngineConfig, readVoiceFallbackConfig 
 import { resolveVoiceEngineSelection } from '@lia/core/voice/engines/registry'
 import { createLiaVoiceService } from '@lia/core/voice/voice-service'
 
+import { allTalkSpeechProvider } from '../../../core/src/providers/alltalk-speech.ts'
 import { createLocalAllTalk } from './local-alltalk.ts'
 import { supportsStageSpeech } from './stage-remote-speech.ts'
 import type { createStageRemoteSpeech } from './stage-remote-speech.ts'
@@ -63,7 +64,7 @@ export function createStageVoice(
           return { ok: false, code: 'disabled' } as const
         const target = voice?.tts?.preferred
         if (target) {
-          if (target.providerId === 'alltalk-local-speech') {
+          if (target.providerId === allTalkSpeechProvider) {
             if (!target.voiceId)
               return { ok: false, code: 'unavailable' } as const
             const response = await allTalk({
