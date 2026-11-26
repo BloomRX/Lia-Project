@@ -8,6 +8,7 @@ import { defaultPresence } from '../../../core/src/presence/index.ts'
 import { createPresenceService } from '../../../core/src/presence/service.ts'
 
 export function createStagePresence(options: {
+  isHostFullscreen: () => boolean
   loadConfig: () => Promise<PresenceConfig | undefined>
   saveConfig: (value: PresenceConfig) => Promise<void>
 }) {
@@ -52,6 +53,7 @@ export function createStagePresence(options: {
       const rendered = new Promise<boolean>((resolve) => { settleRender = resolve })
       const controller = createPresenceService({
         window: overlay,
+        isHostFullscreen: options.isHostFullscreen,
         screen: {
           getAllDisplays: () => screen.getAllDisplays(),
           getCursorScreenPoint: () => screen.getCursorScreenPoint(),

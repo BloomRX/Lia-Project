@@ -76,6 +76,7 @@ async function main(): Promise<void> {
     },
   })
   const presence = createStagePresence({
+    isHostFullscreen: () => Boolean(window && !window.isDestroyed() && window.isFullScreen()),
     async loadConfig() {
       const config = await readProduct()
       return config.status === 'ok' ? config.value.presence : undefined

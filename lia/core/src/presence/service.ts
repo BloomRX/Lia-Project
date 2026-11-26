@@ -26,6 +26,7 @@ export function createPresenceService(options: {
   screen: PresenceScreen
   initial?: unknown
   save: (config: PresenceConfig) => Promise<void>
+  isHostFullscreen?: () => boolean
   random?: () => number
 }) {
   const win = options.window
@@ -37,10 +38,11 @@ export function createPresenceService(options: {
   let ticks = 0
   let queue = Promise.resolve()
   const displays = () => options.screen.getAllDisplays().filter(d => d.workArea.width > 0 && d.workArea.height > 0)
+  const fullscreen = () => win.isFullScreen() || options.isHostFullscreen?.() === true
   function snapshot(): PresenceResult {
     if (disposed || win.isDestroyed())
       return { ok: false, code: 'unavailable' }
-    return { ok: true, state: { config: structuredClone(config), displays: displays(), active, fullscreen: win.isFullScreen() } }
+    return { ok: true, state: { config: structuredClone(config), displays: displays(), active, fullscreen: fullscreen() } }
   }
   function preferredSize({ x, y }: PresenceBounds): PresenceBounds {
     return { x, y, width: Math.round(240 * config.scale), height: Math.round(360 * config.scale) }
@@ -87,9 +89,9 @@ export function createPresenceService(options: {
     const bounds = win.getBounds()
     const cursor = options.screen.getCursorScreenPoint()
     const hover = cursor.x >= bounds.x && cursor.x < bounds.x + bounds.width && cursor.y >= bounds.y && cursor.y < bounds.y + bounds.height
-    const fullscreen = config.pauseOnFullscreen && win.isFullScreen()
-    win.setOpacity(fullscreen || (config.hideOnHover && hover) ? 0 : original?.opacity ?? 1)
-    if (config.paused || config.pinned || fullscreen || hover)
+    const fullscreenPaused = config.pauseOnFullscreen && fullscreen()
+    win.setOpacity(fullscreenPaused || (config.hideOnHover && hover) ? 0 : original?.opacity ?? 1)
+    if (config.paused || config.pinned || fullscreenPaused || hover)
       return
     if (!destination || ++ticks > 150) {
       destination = presenceTarget(displays(), config, preferredSize(bounds), options.random)

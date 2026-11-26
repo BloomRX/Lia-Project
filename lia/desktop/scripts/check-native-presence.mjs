@@ -174,6 +174,30 @@ async function run() {
     })
     assert.deepEqual(hover, { hidden: true, visibleAgain: true })
     assert.equal(JSON.parse(await readFile(join(root, 'lia-product.json'), 'utf8')).presence.hideOnHover, true)
+    await chat.getByRole('button', { name: 'Alternar ocultação ao passar o mouse', exact: true }).click()
+    await chat.getByText('Presença atualizada.', { exact: true }).waitFor()
+    const stageFullscreen = await app.evaluate(async ({ BrowserWindow }) => {
+      const windows = BrowserWindow.getAllWindows()
+      const overlay = windows.find(window => window.webContents.getURL().endsWith('/presence.html'))
+      const stage = windows.find(window => window !== overlay)
+      async function waitFor(condition) {
+        const until = Date.now() + 5_000
+        while (!condition() && Date.now() < until)
+          await new Promise(resolve => setTimeout(resolve, 50))
+        return condition()
+      }
+      try {
+        stage.setFullScreen(true)
+        const hidden = await waitFor(() => stage.isFullScreen() && overlay.getOpacity() === 0)
+        stage.setFullScreen(false)
+        return { hidden, visibleAgain: await waitFor(() => !stage.isFullScreen() && overlay.getOpacity() === 1) }
+      }
+      finally {
+        if (stage.isFullScreen())
+          stage.setFullScreen(false)
+      }
+    })
+    assert.deepEqual(stageFullscreen, { hidden: true, visibleAgain: true })
     const displays = await chat.evaluate(() => window.liaStagePresence.displays())
     const secondDisplay = displays.displays.find(({ workArea }) =>
       initial.x < workArea.x || initial.x >= workArea.x + workArea.width
@@ -218,7 +242,7 @@ async function run() {
     const [reopened] = await Promise.all([app.waitForEvent('window', { timeout: 10_000 }), openButton.click()])
     await chat.getByText('Avatar aberto no desktop.', { exact: true }).waitFor()
     await Promise.all([reopened.waitForEvent('close', { timeout: 10_000 }), chat.close()])
-    const report = { syntheticVrm: true, packagedAvatarOpened: true, live2dLimitationVisible: true, personaUnchanged: true, animatedFramesDiffer: true, invalidOverlayRejected: true, externalTextureRejected: true, moved, pinned: true, home: true, syntheticHover: hover, connectedDisplays: displays.displays.length, secondDisplayPlacement: secondDisplay ? 'PASS' : 'NOT RUN', syntheticDisplayRecovery: displayRecovery, hidden: true, closedWithChat: true }
+    const report = { syntheticVrm: true, packagedAvatarOpened: true, live2dLimitationVisible: true, personaUnchanged: true, animatedFramesDiffer: true, invalidOverlayRejected: true, externalTextureRejected: true, moved, pinned: true, home: true, syntheticHover: hover, stageFullscreen, connectedDisplays: displays.displays.length, secondDisplayPlacement: secondDisplay ? 'PASS' : 'NOT RUN', syntheticDisplayRecovery: displayRecovery, hidden: true, closedWithChat: true }
     await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))
     console.log(JSON.stringify(report))
   }
