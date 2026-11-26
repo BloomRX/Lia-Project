@@ -87,16 +87,33 @@ test('default packaging requires no AIRI files and preserves the internal instal
   assert.deepEqual(config.extraResources[0], { from: inputs.stageOutput, to: 'stage', filter: ['**/*'] })
   assert.ok(config.extraResources.some(resource => resource.from === 'scripts/AIRI-MIT.txt' && resource.to === 'licenses/AIRI-MIT.txt'))
   assert.equal(config.publish, null)
+  assert.equal(config.nsis.deleteAppDataOnUninstall, false)
+  assert.equal(config.nsis.perMachine, false)
 })
 
-test('the packaged Launcher rejects updater feeds in both desktop payloads', (t) => {
+test('the packaged Launcher verifies runtime notices and rejects updater feeds in both desktop payloads', (t) => {
   const root = mkdtempSync(join(tmpdir(), 'Lia updater guard '))
   t.after(() => rmSync(root, { recursive: true, force: true }))
-  assert.doesNotThrow(() => validatePackagedLauncher(root))
+  const runtime = join(root, 'official')
+  file(join(runtime, 'LICENSE'))
+  file(join(runtime, 'LICENSES.chromium.html'))
+  for (const destination of [root, join(root, 'resources/stage')]) {
+    file(join(destination, 'LICENSE.electron.txt'))
+    file(join(destination, 'LICENSES.chromium.html'))
+    file(join(destination, 'version'), '43.4.1')
+  }
+  for (const name of ['LiaStage.exe', 'resources/app.asar', 'icudtl.dat'])
+    file(join(root, 'resources/stage', name))
+  assert.doesNotThrow(() => validatePackagedLauncher(root, runtime))
+  for (const destination of [root, join(root, 'resources/stage')]) {
+    file(join(destination, 'LICENSES.chromium.html'), 'changed')
+    assert.throws(() => validatePackagedLauncher(root, runtime), /Licença do runtime divergente/)
+    file(join(destination, 'LICENSES.chromium.html'))
+  }
   for (const name of ['resources/app-update.yml', 'resources/stage/resources/app-update.yml']) {
     const feed = join(root, name)
     file(feed, 'unexpected-feed')
-    assert.throws(() => validatePackagedLauncher(root), /canal de atualização não autorizado/)
+    assert.throws(() => validatePackagedLauncher(root, runtime), /canal de atualização não autorizado/)
     rmSync(feed)
   }
 })

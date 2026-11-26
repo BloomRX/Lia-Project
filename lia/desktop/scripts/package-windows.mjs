@@ -87,20 +87,26 @@ export function nativeLauncherConfiguration(inputs) {
 
 export function validatePackagedStage(stageOutput, electronDirectory) {
   // electron-builder renames the official runtime notice while branding the exe.
-  for (const file of ['LiaStage.exe', 'resources/app.asar', 'icudtl.dat', 'LICENSE.electron.txt', 'LICENSES.chromium.html', 'version'])
+  for (const file of ['LiaStage.exe', 'resources/app.asar', 'icudtl.dat'])
     requireFile(join(stageOutput, file), 'Stage empacotado')
+  validateRuntimeNotices(stageOutput, electronDirectory)
+  assertNoUpdateFeed(stageOutput)
+}
+
+function validateRuntimeNotices(output, electronDirectory) {
   if (!electronDirectory)
-    throw new Error('Origem oficial do runtime obrigatória para validar o Stage.')
+    throw new Error('Origem oficial do runtime obrigatória para validar o pacote.')
+  const digest = path => createHash('sha256').update(readFileSync(path)).digest('hex')
   for (const [packaged, original] of [['LICENSE.electron.txt', 'LICENSE'], ['LICENSES.chromium.html', 'LICENSES.chromium.html']]) {
     const source = join(electronDirectory, original)
+    const destination = join(output, packaged)
     requireFile(source, 'Licença oficial do runtime')
-    const digest = path => createHash('sha256').update(readFileSync(path)).digest('hex')
-    if (digest(join(stageOutput, packaged)) !== digest(source))
+    requireFile(destination, 'Licença empacotada do runtime')
+    if (digest(destination) !== digest(source))
       throw new Error(`Licença do runtime divergente: ${packaged}`)
   }
-  if (readFileSync(join(stageOutput, 'version'), 'utf8').trim() !== ELECTRON_VERSION)
+  if (readFileSync(join(output, 'version'), 'utf8').trim() !== ELECTRON_VERSION)
     throw new Error('Versão do runtime empacotado divergente.')
-  assertNoUpdateFeed(stageOutput)
 }
 
 function assertNoUpdateFeed(output) {
@@ -108,9 +114,10 @@ function assertNoUpdateFeed(output) {
     throw new Error('O pacote contém um canal de atualização não autorizado.')
 }
 
-export function validatePackagedLauncher(output) {
+export function validatePackagedLauncher(output, electronDirectory) {
   assertNoUpdateFeed(output)
-  assertNoUpdateFeed(join(output, 'resources/stage'))
+  validateRuntimeNotices(output, electronDirectory)
+  validatePackagedStage(join(output, 'resources/stage'), electronDirectory)
 }
 
 export function validateArchiveEntries(entries) {
@@ -174,7 +181,7 @@ export function packageWindows({ checkOnly = false, unpacked = false, internalTe
       ...(unpacked ? ['--dir'] : []),
     ])
     const output = resolve(inputs.launcher, launcherConfiguration.directories.output, 'win-unpacked')
-    validatePackagedLauncher(output)
+    validatePackagedLauncher(output, inputs.electron)
     validateArchive(inputs.builder, join(output, 'resources/app.asar'))
     validateArchive(inputs.builder, join(output, 'resources/stage/resources/app.asar'))
   }
