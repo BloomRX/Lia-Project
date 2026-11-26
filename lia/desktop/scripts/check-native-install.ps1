@@ -143,7 +143,29 @@ finally {
     $report['uninstallExitCode'] = $process.ExitCode
     $report['uninstall'] = $process.ExitCode -eq 0 -and !(Test-Path -LiteralPath $launcher) -and !(Get-PreviewRegistration)
   }
+  if ($report.uninstall -and $report.profilePreserved) {
+    $report['testProfilePreservedAfterUninstall'] = $false
+    try {
+      $files = @('lia-product.json', 'lia-transports.json', 'native-stage-profile/lia-chat-history.json', 'lia-secrets.json')
+      $baseline = ConvertFrom-Json -InputObject (Get-Content -LiteralPath (Join-Path $upgradeProfile 'upgrade-baseline.json') -Raw)
+      $preserved = $baseline.Count -eq $files.Count
+      foreach ($name in $files) {
+        $expected = @($baseline | Where-Object name -CEQ $name)
+        $path = Join-Path $upgradeProfile $name
+        if ($expected.Count -ne 1 -or !(Test-Path -LiteralPath $path -PathType Leaf) -or
+          (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ine $expected[0].sha256) {
+          $preserved = $false
+        }
+      }
+      $report['testProfilePreservedAfterUninstall'] = $preserved
+    }
+    catch {
+      $report['testProfilePreservedAfterUninstall'] = $false
+    }
+  }
   $report | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $evidence 'report.json') -Encoding UTF8
 }
 
 if (!$report.uninstall) { throw 'A desinstalação da prévia não foi confirmada.' }
+
+if ($PreviousInstaller -and !$report.testProfilePreservedAfterUninstall) { throw 'O perfil de teste não foi preservado após a desinstalação.' }

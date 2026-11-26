@@ -101,7 +101,8 @@ Para um ensaio privado de atualização, gere um instalador com versão superior
 --upgrade-test-version=0.0.3`. O número serve ao teste e fica fora do manifesto
 do repositório. Passe os dois instaladores ao gate com `-PreviousInstaller` e
 `-Installer`. O gate confere a versão instalada, a troca do Stage e a
-preservação do perfil sintético e da credencial DPAPI.
+preservação do perfil sintético e da credencial DPAPI. Após desinstalar,
+compara os hashes dos quatro arquivos do perfil de teste com a referência.
 
 
 O CI também testa uma atualização entre duas versões geradas da mesma
