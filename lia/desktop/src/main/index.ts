@@ -5,6 +5,7 @@ import process from 'node:process'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { readVoiceEnabledConfig } from '@lia/core/voice/config'
 import { KOKORO_DEFAULT_VOICE_ID, KOKORO_VOICES } from '@lia/core/voice/engines/kokoro'
 import { createWindowsUserCipher } from '@lia/core/secrets/windows-user-cipher'
 import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electron'
@@ -241,7 +242,10 @@ async function bootstrap(): Promise<void> {
     const preview = new AbortController()
     customPreview = preview
     try {
-      const language = (await host.productSnapshot())?.preferences?.language
+      const product = await host.productSnapshot()
+      if (!readVoiceEnabledConfig(product?.voice))
+        return { ok: false, code: 'disabled' }
+      const language = product?.preferences?.language
       const text = language?.toLowerCase().startsWith('en') ? 'Hello. This is a preview of my voice.' : 'Olá. Esta é uma prévia da minha voz.'
       const result = await synthesizePreview({ voice, text, language }, preview.signal)
       return ownsWindow(event) && !preview.signal.aborted ? result : { ok: false, code: 'cancelled' }

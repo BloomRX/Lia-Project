@@ -136,6 +136,15 @@ try {
     assert.equal(requests[0].form.character_voice_gen, voiceId)
     requests.length = 0
   }
+  if (!live) {
+    const saveVoiceEnabled = enabled => launcher.evaluate(value => window.liaApi.updateConfig({ update: { voice: { enabled: value } } }), enabled)
+    assert.equal((await saveVoiceEnabled(false)).status, 'ok')
+    await launcher.getByRole('button', { name: 'Ouvir prévia', exact: true }).click()
+    await launcher.getByText('A voz está desativada nas preferências da Lia.', { exact: true }).waitFor()
+    assert.equal(requests.length, 0)
+    assert.equal(await launcher.locator('#custom-preview-audio').getAttribute('src'), null)
+    assert.equal((await saveVoiceEnabled(true)).status, 'ok')
+  }
   const config = JSON.parse(await readFile(join(root, 'lia-product.json'), 'utf8'))
   assert.deepEqual(config.voice.tts.preferred, { providerId: 'alltalk-local-speech', voiceId })
   if (!live)
@@ -174,6 +183,7 @@ try {
     mutedPlayback: true,
     mutedLauncherPreview: true,
     pendingLauncherPreviewCancelled: live ? null : true,
+    disabledVoiceSuppressesPreview: live ? null : true,
     offlineWithoutFallback: live ? null : true,
   }
   await writeFile(join(root, 'report.json'), JSON.stringify(report, null, 2))

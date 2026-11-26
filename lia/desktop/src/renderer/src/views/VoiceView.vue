@@ -71,6 +71,11 @@ async function playCustomPreview() {
     const result = await props.api?.customSpeechPreview?.(customSpeech.value.voiceId)
     if (previewRequest !== active)
       return
+    if (result?.code === 'disabled') {
+      clearPreview()
+      customFeedback.value = 'A voz está desativada nas preferências da Lia.'
+      return
+    }
     if (!result?.ok || !(result.audio instanceof ArrayBuffer))
       throw new Error('preview-unavailable')
     previewUrl = URL.createObjectURL(new Blob([result.audio], { type: 'audio/wav' }))
