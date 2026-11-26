@@ -23,10 +23,11 @@ import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMe
 import { stageConversationChange, stageHistoryChange, stageHistoryGet, stageHistoryImport, stageHistoryRemoveMessage, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
 import { stagePersonaChange, stagePersonaGet } from '../shared/chat-ipc.ts'
 import { stagePresenceReadPackagedAvatar } from '../shared/chat-ipc.ts'
-import { stageExpressionGet, stageExpressionSet, stageHubCatalogGet, stageImageAudit, stageImageCopy, stageImageCopyCancel, stageImageInspect, stageMemoryExport } from '../shared/chat-ipc.ts'
+import { stageExpressionGet, stageExpressionSet, stageHubCatalogGet, stageHubSkillAudit, stageHubSkillCancel, stageHubSkillRun, stageHubSkillStart, stageHubSkillStatus, stageImageAudit, stageImageCopy, stageImageCopyCancel, stageImageInspect, stageMemoryExport } from '../shared/chat-ipc.ts'
 import { stageChatStopSpeech, stageVoiceAutoPlay } from '../shared/chat-ipc.ts'
 import { isExpressionPhase } from '../shared/expression-phase.ts'
 import { stageLocale, stageText } from '../shared/locale.ts'
+import { createStageHubSkill } from './stage-hub-skill.ts'
 import { createStageChat } from './stage-chat.ts'
 import { createStageImageCopy } from './stage-image-copy.ts'
 import { createStageHistory } from './stage-history.ts'
@@ -38,6 +39,7 @@ import { createStageTranscription } from './stage-transcription.ts'
 import { createStageVoice } from './stage-voice.ts'
 
 async function main(): Promise<void> {
+  const hubSkill = createStageHubSkill()
   const profile = process.env.LIA_STAGE_PROFILE_DIR?.trim()
   if (profile) {
     mkdirSync(profile, { recursive: true })
@@ -143,12 +145,36 @@ async function main(): Promise<void> {
     cancel()
     recording?.abort()
     imageCopy?.abort()
+    void hubSkill.cancel()
     presence.setExpression('idle')
     void voice.cancel().catch(() => {})
   }
   const authorized = (event: Electron.IpcMainInvokeEvent) =>
     window && !window.isDestroyed() && event.sender === window.webContents
     && event.senderFrame === window.webContents.mainFrame
+  ipcMain.handle(stageHubSkillRun, (event, text: unknown) => {
+    const owner = window
+    if (!owner || !authorized(event))
+      return { ok: false, code: 'unavailable' }
+    return hubSkill.run(text, async (signal, bytes) => {
+      const locale = await readLocale()
+      if (!authorized(event) || signal.aborted)
+        return false
+      const { response } = await dialog.showMessageBox(owner, {
+        type: 'question', title: 'Lia Agent Hub',
+        message: stageText(locale, 'Enviar a seleção ao validador local do Hub?'),
+        detail: `${bytes} bytes · skill.validate`,
+        buttons: [stageText(locale, 'Cancelar'), stageText(locale, 'Validar')],
+        defaultId: 0, cancelId: 0, noLink: true, signal,
+      })
+      return response === 1 && Boolean(authorized(event)) && !signal.aborted
+    })
+  })
+  ipcMain.handle(stageHubSkillStart, event => authorized(event) ? hubSkill.start() : { ok: false, code: 'unavailable' })
+  ipcMain.handle(stageHubSkillStatus, event => authorized(event) ? hubSkill.status() : undefined)
+  ipcMain.handle(stageHubSkillCancel, event => authorized(event) ? hubSkill.cancel() : undefined)
+  ipcMain.handle(stageHubSkillAudit, event => authorized(event) ? hubSkill.audit() : { ok: false, code: 'unavailable' })
+
   let readingHubCatalog: ReturnType<typeof readPublishedHubCatalog> | undefined
   const hubHome = process.env.LIA_AGENTHUB_HOME?.trim() || undefined
   ipcMain.handle(stageHubCatalogGet, async (event) => {

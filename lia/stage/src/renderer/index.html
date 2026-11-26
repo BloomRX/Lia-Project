@@ -136,12 +136,21 @@
       </details>
       <details>
         <summary data-translate>Lia Agent Hub</summary>
-        <p data-translate>Catálogo publicado. A execução de capacidades ainda não está conectada.</p>
+        <p data-translate>Catálogo publicado pelo Lia Agent Hub.</p>
         <button id="hub-refresh" type="button" data-translate>Consultar catálogo</button>
         <label for="hub-search" data-translate>Filtrar capacidades</label>
         <input id="hub-search" type="search" maxlength="160" disabled>
         <p id="hub-status" role="status"></p>
         <ul id="hub-capabilities" aria-label="Capacidades publicadas"></ul>
+        <h2 data-translate>Validação de Skill</h2>
+        <label for="hub-skill-text" data-translate>Texto da Skill</label>
+        <textarea id="hub-skill-text" rows="5" maxlength="65536"></textarea>
+        <p data-translate>Selecione o trecho a validar. A validação estrutural não aprova a segurança da Skill.</p>
+        <button id="hub-skill-run" type="button" data-translate>Validar esta Skill com o Hub</button>
+        <button id="hub-skill-cancel" type="button" disabled data-translate>Cancelar validação</button>
+        <button id="hub-skill-audit" type="button" disabled data-translate>Ver auditoria</button>
+        <p id="hub-skill-status" role="status"></p>
+        <ol id="hub-skill-events"></ol>
       </details>
       <details>
         <summary data-translate>Memória</summary>

@@ -2,6 +2,8 @@
 
 ## 0. Estado agora
 
+- **Validação supervisionada de Skill.** O Stage envia somente a seleção confirmada no Main à CLI local do Agent Hub. O operador fornece um grant temporário de uso único. O painel mostra contagens, cancelamento e auditoria. O Electron Windows passou com a CLI oficial e respostas de confirmação injetadas. Consulte [provisionamento e evidências](LIA-EVOLUTION-PROGRAM-V1.md#incremento-da-meta-03--validação-estrutural-supervisionada).
+
 - **Evolution Program V1.** Memória local classificada e editável, catálogo do Hub filtrável, sugestão de relógio, expressão simulada no chat, na voz e no VRM, cópia supervisionada de imagem e tokens visuais V1.1 chegaram ao desktop próprio. A [trilha de execução](LIA-EVOLUTION-PROGRAM-V1.md) registra os gates Windows e os limites de delegação e aprovação de telas.
 
 - **Cognitive Foundation V1.** O Stage combina identidade versionada, personalidade persistida, histórico e memória autorizada para montar a requisição ao modelo. A consulta de relógio exige confirmação no Main a cada turno e o catálogo publicado do Agent Hub é informativo. O Electron Windows confirmou o fluxo com HTTP sintético, respostas de diálogo injetadas e índice publicado pelo Hub. Consulte a [arquitetura cognitiva](../architecture/LIA-COGNITIVE-ARCHITECTURE.md#cognitive-foundation-v1-no-stage).
@@ -61,7 +63,7 @@
 - **Atualização privada Windows.** O ensaio com a base publicada em `27a5f61d` atualizou 0.0.2 para 0.0.3, substituiu o Stage e manteve configuração, histórico visível e uma credencial sintética recuperável com DPAPI. O gate confirmou a saída dos processos e a desinstalação. SHA-256 da prévia de ensaio 0.0.3 `483DDE182B89468BA71CB6B24E712BC3D8489DDD8C1C63F65C52778A11A02AF9`. A conversa nova pelo Launcher foi coberta pelo ensaio de instalação limpa separado.
 - **Retirada da árvore legada.** A `main` mantém o desktop próprio como único caminho operacional. Os 5.271 arquivos da cópia AIRI saem da árvore versionada e permanecem recuperáveis pelo Git e pelo bundle verificado. O checkout de migração preserva os arquivos locais. A renderização Live2D, a síntese clonada, o OIDC integrado e a validação externa ainda são lacunas da Lia própria.
 
-- **Próximo corte.** A árvore legada já foi retirada. As lacunas de validação do desktop próprio incluem áudio físico, serviços externos, OIDC de produção, renderização Live2D e distribuição pública. A execução supervisionada por meio do Agent Hub depende de um contrato com permissões e cancelamento no Hub.
+- **Próximo corte.** A árvore legada já foi retirada. As lacunas de validação do desktop próprio incluem áudio físico, serviços externos, OIDC de produção, renderização Live2D e distribuição pública. A operação supervisionada `skill.validate` segue o contrato V1 do Agent Hub. As demais capacidades continuam fora desse contrato.
 
 [Evidências da Rodada 22](../reports/LIA-ROUND-22-IMPLEMENTATION-REPORT.md) · [Pendências por ambiente](QUANTO-FALTA.md)
 

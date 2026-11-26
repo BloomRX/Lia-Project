@@ -9,7 +9,7 @@ import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMe
 import { stageConversationChange, stageHistoryChange, stageHistoryGet, stageHistoryImport, stageHistoryRemoveMessage, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
 import { stagePersonaChange, stagePersonaGet } from '../shared/chat-ipc.ts'
 import { stagePresenceReadPackagedAvatar, stagePresenceVisibility } from '../shared/chat-ipc.ts'
-import { stageExpressionChanged, stageExpressionGet, stageExpressionSet, stageHubCatalogGet, stageImageAudit, stageImageCopy, stageImageCopyCancel, stageImageInspect, stageMemoryExport } from '../shared/chat-ipc.ts'
+import { stageExpressionChanged, stageExpressionGet, stageExpressionSet, stageHubCatalogGet, stageHubSkillAudit, stageHubSkillCancel, stageHubSkillRun, stageHubSkillStart, stageHubSkillStatus, stageImageAudit, stageImageCopy, stageImageCopyCancel, stageImageInspect, stageMemoryExport } from '../shared/chat-ipc.ts'
 import { stageChatStopSpeech, stageVoiceAutoPlay } from '../shared/chat-ipc.ts'
 
 import { isExpressionPhase } from '../shared/expression-phase.ts'
@@ -20,6 +20,11 @@ contextBridge.exposeInMainWorld('liaStageLanguage', {
 
 contextBridge.exposeInMainWorld('liaStageHub', {
   catalog: () => ipcRenderer.invoke(stageHubCatalogGet),
+  validateSkill: (text: string) => ipcRenderer.invoke(stageHubSkillRun, text),
+  startSkill: () => ipcRenderer.invoke(stageHubSkillStart),
+  skillStatus: () => ipcRenderer.invoke(stageHubSkillStatus),
+  cancelSkill: () => ipcRenderer.invoke(stageHubSkillCancel),
+  skillAudit: () => ipcRenderer.invoke(stageHubSkillAudit),
 })
 
 contextBridge.exposeInMainWorld('liaStagePresence', {

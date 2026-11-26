@@ -6,7 +6,7 @@ Lia-Project. O plano de produto e a arquitetura cognitiva definem os limites.
 | Meta | Estado | Próximo passo |
 | --- | --- | --- |
 | 02 Memory System | VALIDATED | Incremento local validado. Busca semântica depende de embeddings validados. |
-| 03 Agent Hub Integration | PARTIAL | Catálogo real validado. Delegação depende de um executor externo. |
+| 03 Agent Hub Integration | VALIDATED | Catálogo real e operação supervisionada skill.validate validados. |
 | 04 Decision & Autonomy | VALIDATED | Responder, sugerir plano de relógio e executar mediante confirmação no Stage. |
 | 05 Personality & Emotion | VALIDATED | Estado observado em chat, áudio e expressão VRM. |
 | 06 Perception & Action | VALIDATED | Inspeção e cópia supervisionada de anexo. Demais fontes dependem de autorização específica. |
@@ -179,3 +179,51 @@ Evidências locais em `J:/lia-evidence/evolution-program-v1` e capturas
 revisadas em `J:/lia-evidence/captures`. Próxima ação para retomada futura.
 Solicitar aprovação das telas e um contrato de execução ao responsável pelo
 executor, antes de ampliar a integração.
+
+## Incremento da Meta 03 — validação estrutural supervisionada
+
+O contrato [Supervised Execution V1](https://github.com/BloomRX/Lia-AgentHub/blob/8c14ec85a7f5ff350bd09651de63f45894487874/docs/architecture/SUPERVISED-EXECUTION-V1.md)
+publicado posteriormente ao primeiro corte inclui somente `skill.validate`.
+No painel do Hub, a pessoa cola o texto, seleciona o trecho e solicita
+a validação. O Main confirma a operação com Cancelar como padrão. O Stage
+consulta a fila, apresenta as quatro contagens e mostra a auditoria terminal.
+Concluir a validação estrutural não aprova a segurança da Skill.
+
+### Provisionamento local
+
+O operador usa a CLI oficial com `--home ROOT execution init` em raiz
+privada, provisiona o consumidor com `execution provision lia-project` e
+emite um grant com `execution grant lia-project --ttl SECONDS`. Provisionar
+e emitir usam o token de operador no JSON do stdin. O operador inicia o
+Stage em ambiente privado com `LIA_AGENTHUB_CLI` e
+`LIA_AGENTHUB_EXECUTION_HOME` absolutos e fornece
+`LIA_AGENTHUB_CONSUMER_TOKEN` e `LIA_AGENTHUB_GRANT_ID` somente ao processo
+confiável. O Main retira esses dois valores do ambiente antes de criar as
+janelas. O token de operador fica fora do Stage. Para outra execução,
+o operador emite outro grant e inicia uma nova sessão do Stage. A recusa local
+preserva o grant disponível. O catálogo não autoriza a execução.
+
+O processo CLI recebe somente argumentos fixos e a raiz do operador. O
+contexto enviado é o trecho selecionado. O token e a concessão seguem em
+JSON no stdin. Consultas, cancelamento e auditoria usam o ID mantido no Main.
+O Stage projeta estados, contagens e eventos previstos no schema, sem expor
+diagnóstico cru, texto submetido ou credenciais ao contexto do modelo.
+A auditoria terminal é compartilhada entre consultas concorrentes e
+reutilizada depois de carregada.
+
+### Verificação Windows
+
+- `node lia/desktop/scripts/check-hub-skill-cli.mjs <CLI.exe>` passou com
+  CLI oficial de SHA-256
+  `BAE46AF66F702A9698A116FBC59ED205B60E908BC6D34159D4685ABECAFD7C81`.
+  Cobre autoridade, expiração por relógio real, grant reutilizado, repetição
+  idêntica de submit, conflito, cancelamento e indisponibilidade.
+- `node lia/desktop/scripts/check-native-hub-skill.mjs <CLI.exe>` passou no
+  Electron Windows com a mesma CLI, raiz privada de ensaio e respostas de
+  confirmação injetadas. Exercitou a seleção, recusa, contagens, auditoria,
+  grant vencido e reutilizado, CLI ausente e cancelamento enfileirado via IPC.
+  A repetição terminal pelo Stage devolveu o mesmo estado. O gate isolado da
+  CLI verificou a idempotência de submit diretamente no Hub.
+- A corrida de cancelamento durante o cálculo síncrono não foi forçada no
+  Electron. O Hub decide a transição vencedora. A execução é local e o Stage
+  não oferece pausa, executor genérico ou execução de scripts de Skills.
