@@ -525,3 +525,9 @@ REC-02 (P-2 limiares) ───────┘
 6. Nunca aplicar patch de `auth.ts` sem revisar import por import.
 7. Não rodar lint global em arquivos de outras frentes.
 8. Não fechar branch de origem antes de o port estar provado.
+
+### Direitos da distribuição Windows
+
+Na árvore `8cd3f35a`, o Launcher importa `lia/assets/character/LiaHeroImage.png` na Home e o empacotador usa `lia/assets/icons/IconAppCompact.png` como ícone do Launcher e do Stage. Os dois arquivos já constam no commit `031b4039`. O histórico inspecionado identifica a entrada no Git, mas não registra uma concessão de redistribuição para essas imagens. O repositório público também não apresentava licença de produto no GitHub.
+
+O empacotador limita a geração a ensaios privados, compara os avisos de Electron e Chromium com os arquivos oficiais do runtime e recusa a configuração de feed de atualização. O aviso MIT do código histórico acompanha a instalação. Antes de liberar distribuição pública, registrar a licença da Lia, confirmar os direitos dos dois assets usados no pacote e concluir a revisão das dependências empacotadas. O VRM escolhido no disco do usuário e o runtime Live2D não integram o instalador privado.
