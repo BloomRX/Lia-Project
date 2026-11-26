@@ -5,6 +5,7 @@ import { t } from './locale.js'
 const form = document.querySelector('form')
 const message = document.querySelector('#message')
 const allowClock = document.querySelector('#allow-clock')
+const suggestClock = document.querySelector('#suggest-clock')
 const send = document.querySelector('button[type="submit"]')
 const cancel = document.querySelector('#cancel')
 const messages = document.querySelector('#messages')
@@ -111,6 +112,7 @@ const errors = {
   'image-invalid': t('Escolha uma imagem PNG ou JPEG de até 3 MB.'),
   'image-unavailable': t('A conexão selecionada não tem uma rota de visão disponível.'),
   'persona-unavailable': t('Este cartão não está disponível para esta conexão. Use IA local ou selecione a personalidade padrão.'),
+  'capability-suggested': t('Plano sugerido. Marque a consulta e envie a mensagem. Se confirmar, a Lia poderá consultar o relógio deste computador e usar o resultado na resposta.'),
   'tool-unavailable': t('A consulta de data e hora está disponível em mensagens de texto com IA local compatível.'),
   'rate-limit': t('A conexão de IA atingiu seu limite de uso. Aguarde e tente novamente.'),
   timeout: t('A IA demorou para responder. Tente novamente.'),
@@ -436,9 +438,11 @@ form.addEventListener('submit', async (event) => {
   send.disabled = true
   updateClearAction()
   cancelRequested = false
+  const suggestion = event.submitter === suggestClock
   const clockAllowed = allowClock.checked
   allowClock.checked = false
   allowClock.disabled = true
+  suggestClock.disabled = true
   cancel.disabled = false
   message.readOnly = true
   imagePick.disabled = true
@@ -450,7 +454,8 @@ form.addEventListener('submit', async (event) => {
       status.textContent = errors.cancelled
       return
     }
-    const result = await window.liaStageChat.send(text, bytes, clockAllowed)
+    const intent = suggestion ? { capability: 'local-clock', mode: 'suggest' } : clockAllowed
+    const result = await window.liaStageChat.send(text, bytes, intent)
     if (!result.ok) {
       status.textContent = errors[result.code] ?? errors.unavailable
       return
@@ -485,6 +490,7 @@ form.addEventListener('submit', async (event) => {
     updateClearAction()
     cancel.disabled = true
     allowClock.disabled = false
+    suggestClock.disabled = false
     imagePick.disabled = false
     imageRemove.disabled = false
     message.focus()

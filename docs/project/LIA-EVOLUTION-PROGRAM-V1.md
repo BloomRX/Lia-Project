@@ -7,8 +7,8 @@ Lia-Project. O plano de produto e a arquitetura cognitiva definem os limites.
 | --- | --- | --- |
 | 02 Memory System | VALIDATED | Incremento local validado. Busca semântica depende de embeddings validados. |
 | 03 Agent Hub Integration | PARTIAL | Catálogo real validado. Delegação depende de um executor externo. |
-| 04 Decision & Autonomy | IN_PROGRESS | Reaproveitar a política por turno e a confirmação no Main. |
-| 05 Personality & Emotion | NOT_STARTED | Ligar estado simulado observável aos consumidores atuais. |
+| 04 Decision & Autonomy | VALIDATED | Responder, sugerir plano de relógio e executar mediante confirmação no Stage. |
+| 05 Personality & Emotion | IN_PROGRESS | Ligar estado simulado observável aos consumidores atuais. |
 | 06 Perception & Action | NOT_STARTED | Selecionar um fluxo autorizado e verificável. |
 | 07 Avatar & Presence | NOT_STARTED | Exercitar presença e reação com o VRM existente. |
 | 08 Design Foundation | NOT_STARTED | Identificar os materiais oficiais aprovados. |
@@ -63,3 +63,21 @@ filtro e inspeção de ID. A conversa do ensaio usou HTTP sintético.
 Próxima ação concreta. Integrar uma sugestão de plano com consumidor no
 Stage e reaproveitar a confirmação de relógio no Main para o primeiro passo
 supervisionado.
+
+## Meta 04 com primeiro fluxo supervisionado validado
+
+A Meta 03 está publicada em `7700e5f1`. A Meta 04 expõe a sugestão de
+plano do relógio no chat. O plano informa como solicitar, autorizar e usar
+o resultado. A sugestão preserva o rascunho, sem acessar o modelo ou
+executar a capacidade. O envio com consulta passa pela confirmação nativa
+existente, e a resposta do modelo só recebe o horário depois de uma chamada
+válida. O Stage mantém o cancelamento e a revalidação do destino.
+
+Build, typecheck e lint passaram. O gate Electron Windows
+`lia-native-history-D61gGU` confirmou sugestão sem envio, recusa sem envio e
+ida e volta do relógio com HTTP sintético e confirmação injetada. O plano se
+restringe à capacidade conhecida. Níveis de autonomia contínua e execução
+delegada permanecem indisponíveis.
+
+Próxima ação concreta. Definir estados expressivos simulados, ligados aos
+eventos reais de conversa e expostos aos consumidores de voz e presença.

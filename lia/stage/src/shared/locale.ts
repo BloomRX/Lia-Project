@@ -160,6 +160,8 @@ const english = new Map([
   ['Mensagem apagada.', 'Message deleted.'],
   ['Não foi possível apagar esta mensagem.', 'Could not delete this message.'],
   ['Apagar notas', 'Delete notes'],
+  ['Sugerir plano para data e hora', 'Suggest a date and time plan'],
+  ['Plano sugerido. Marque a consulta e envie a mensagem. Se confirmar, a Lia poderá consultar o relógio deste computador e usar o resultado na resposta.', 'Suggested plan. Select the clock option and send the message. If you confirm, Lia can check this computer’s clock and use the result in her reply.'],
   ['Filtrar capacidades', 'Filter capabilities'],
   ['Nenhuma capacidade corresponde ao filtro.', 'No capabilities match the filter.'],
   ['Identificador da capacidade', 'Capability identifier'],

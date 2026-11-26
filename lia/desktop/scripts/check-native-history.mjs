@@ -341,6 +341,11 @@ try {
     }
   }, response)
   const callIndex = requests.length
+  await page.getByLabel('Mensagem', { exact: true }).fill('Que horas são?')
+  await page.getByRole('button', { name: 'Sugerir plano para data e hora' }).click()
+  await page.getByText(/^Plano sugerido\./).waitFor()
+  assert.equal(requests.length, callIndex)
+  assert.equal(await page.getByLabel('Mensagem', { exact: true }).inputValue(), 'Que horas são?')
   await confirmClock(0)
   await clock.check()
   await page.getByRole('textbox', { name: 'Mensagem' }).fill('Que horas são?')
@@ -454,6 +459,7 @@ try {
   assert.doesNotMatch(JSON.stringify(requests.at(-1)), /filtro violeta|versão expirada/)
   const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, legacyTextImported: true, cancellationPreservedHistory: true, cleared: true, clearDisabledWhenEmpty: true, rateLimitSanitized: true, refusedImageWithoutVision: true, conversationsIsolated: true, selectionRestored: true, deletionConfirmed: true, builtInPersonaInRequest: true, importedPersonaInRequest: true, importedPersonaRestored: true, personaContextIsolated: true, kokoroSelectedByLauncher: Boolean(kokoroVoice), kokoroVoice: kokoroVoice ?? (withVoice ? 'default' : null), localKokoroMutedPlayback: withVoice ? 'cancelled, retried, played and stopped' : null, autoPlay: withVoice ? 'opt-in, persisted, played, opted out' : null, customizedTraitsPersisted: true }
   report.localClockRoundTrip = true
+  report.clockSuggestion = { draftPreserved: true, noModelRequest: true }
   report.clockConfirmation = { dialogResponse: 'injected', deniedWithoutRequest: true, acceptedRoundTrip: true }
   report.identityStableWithImportedPersona = true
   report.singleMessageRemoved = { dialogResponse: 'injected', remainingReplyVisible: true }
