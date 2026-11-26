@@ -42,9 +42,9 @@ O que é exclusivo do Claude Code, e você deve IGNORAR se não for ele: a
 precedência CLAUDE.md × AGENTS.md, @import, .claude/rules/, /context, /memory.
 Nada disso existe para as demais ferramentas.
 
-Armadilha válida para TODOS: airi/AGENTS.md é o rulebook do AIRI upstream e não
-contém NENHUMA regra da Lia. Abrir a sessão dentro de airi/ faz perder pt-BR,
-STOP AND REPORT, o baseline e o gate — sem erro e sem aviso. Abra na raiz.
+Abra a sessão na raiz da Lia. Se consultar um checkout histórico com
+`airi/`, aplique as regras da Lia a partir deste arquivo. O `AGENTS.md` da
+árvore arquivada contém instruções do upstream.
 
 Antes de analisar código ou propor qualquer mudança, ler o CABEÇALHO DE ESTADO:
 

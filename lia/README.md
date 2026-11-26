@@ -44,17 +44,12 @@ O botão **Conversar com Lia** abre o Stage próprio. Para iterar com
 `corepack pnpm run dev` no Launcher, prepare primeiro o Stage com
 `Lia.bat -PrepareOnly`.
 
-## Por que ao lado e não dentro
+## Histórico da migração
 
-`airi/` é uma cópia do upstream `moeru-ai/airi` em `2c1e223` com 353 arquivos da
-Lia injetados. Qualquer coisa dentro de `airi/` é sobrescrevível por um
-`subtree pull`. `lia/` não é: o AIRI não sabe que ele existe.
-
-E não entra no workspace pnpm do AIRI por um motivo concreto — se entrasse,
-`@lia/contracts` passaria a depender do catálogo e do `pnpm install` do AIRI.
-Ela perde a única propriedade que a torna útil: **rodar sem instalar nada**.
-
----
+A integração com o AIRI está arquivada no histórico Git. A partir da retirada
+da árvore em `d6eb8b81`, os comandos deste guia usam os lockfiles próprios
+do Launcher, do runtime e do Stage. O registro da migração fica na
+[matriz de integração](../docs/reports/LIA-BRANCH-INTEGRATION-MATRIX.md).
 
 ## `lia/core` — `@lia/contracts`
 
@@ -67,18 +62,18 @@ Sem dependências, sem build, sem transpilador. Usa `node --test` e o
 `--experimental-strip-types` do Node 22.
 
 ```bash
-cd lia/core && node --experimental-strip-types --test "test/*.test.ts"
-# 154 testes de contratos e runtime
+cd lia/core
+node --experimental-strip-types --test "test/*.test.ts"
 ```
 
-O pacote roda sozinho em uma cópia de `lia/`. Para verificar também
-os imports dos aplicativos do workspace legado, execute na raiz do
-repositório `node --test Tests/tools/lia-contract-consumers.test.mjs`.
+O pacote roda sozinho em uma cópia de `lia/`. Na raiz do repositório,
+`node --test Tests/tools/lia-contract-consumers.test.mjs` verifica também
+os contratos dos consumidores e a ausência de dependências do workspace arquivado.
 
 **Restrição do strip-types:** o Node recusa sintaxe que só existe em TypeScript
 — parameter properties, `enum`, `namespace`, decorators. O código usa
-`readonly #campo` com atribuição no construtor. Não adicionar transpilador:
-isso arrastaria o install do AIRI.
+`readonly #campo` com atribuição no construtor, para que os contratos rodem
+diretamente no Node.
 
 ---
 
