@@ -5,10 +5,7 @@ import { test } from 'node:test'
 
 import { createLocalAllTalk, listLocalAllTalkVoices } from '../../core/src/providers/local-alltalk.ts'
 
-const wave = Buffer.alloc(46)
-wave.write('RIFF')
-wave.writeUInt32LE(wave.length - 8, 4)
-wave.write('WAVE', 8)
+const wave = Buffer.from('524946462600000057415645666d74201000000001000100803e0000007d00000200100064617461020000000000', 'hex')
 const signal = () => new AbortController().signal
 
 test('uses AllTalk V2 form encoding and reads the generated WAV from the same local service', async () => {
@@ -73,4 +70,15 @@ test('the local voice catalog returns only unique usable WAV names', async () =>
   })
   assert.deepEqual(catalog, { ok: true, voices: ['Dora.wav', 'João.wav'] })
   assert.deepEqual(await listLocalAllTalkVoices(async () => Response.json({ unexpected: true })), { ok: false })
+})
+
+
+test('rejects audio with a RIFF header and a truncated data chunk', async () => {
+  const broken = Buffer.from(wave)
+  broken.writeUInt32LE(100, 40)
+  const speak = createLocalAllTalk(new URL('http://127.0.0.1:7851'), async url =>
+    new URL(String(url)).pathname.startsWith('/api/')
+      ? Response.json({ status: 'generate-success', output_file_url: '/audio/fixture.wav' })
+      : new Response(broken))
+  assert.deepEqual(await speak({ text: 'Teste', voice: 'fixture.wav' }, signal()), { ok: false, code: 'unavailable' })
 })

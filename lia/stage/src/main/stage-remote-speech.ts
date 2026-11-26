@@ -1,6 +1,7 @@
 import type { LiaProductConfigRead, LiaProductTtsTarget } from '@lia/core/product/config'
 import type { TransportSnapshot } from '../../../core/src/transports/contracts.ts'
 
+import { isSpeechWave } from '../../../core/src/providers/speech-wave.ts'
 import { credentialForDestination } from '../../../core/src/credentials/destination.ts'
 
 const maxAudioBytes = 32 * 1024 * 1024
@@ -85,8 +86,7 @@ export function createStageRemoteSpeech(deps: {
       }
       signal.throwIfAborted()
       const audio = Buffer.concat(chunks)
-      if (audio.length < 44 || audio.toString('ascii', 0, 4) !== 'RIFF' || audio.toString('ascii', 8, 12) !== 'WAVE'
-        || audio.readUInt32LE(4) !== audio.length - 8 || audio.includes(token))
+      if (!isSpeechWave(audio) || audio.includes(token))
         return { ok: false, code: 'unavailable' } as const
       return { ok: true, audio: new Uint8Array(audio).buffer } as const
     }

@@ -2,6 +2,7 @@ import { Buffer } from 'node:buffer'
 import { randomUUID } from 'node:crypto'
 
 import { isAllTalkVoiceFile } from './alltalk-speech.ts'
+import { isSpeechWave } from './speech-wave.ts'
 
 export const allTalkLocalOrigin = 'http://127.0.0.1:7851'
 
@@ -53,8 +54,7 @@ export function createLocalAllTalk(base: URL, request: typeof fetch = fetch) {
       active.throwIfAborted()
       const response = await request(new URL(output.output_file_url, origin), sameOrigin)
       const audio = await readResponse(response, active, 32 * 1024 * 1024)
-      if (audio.length < 44 || audio.toString('ascii', 0, 4) !== 'RIFF' || audio.toString('ascii', 8, 12) !== 'WAVE'
-        || audio.readUInt32LE(4) !== audio.length - 8)
+      if (!isSpeechWave(audio))
         return { ok: false, code: 'unavailable' } as const
       return { ok: true, audio: new Uint8Array(audio).buffer } as const
     }
