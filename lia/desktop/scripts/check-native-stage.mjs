@@ -317,10 +317,16 @@ async function run() {
     })
   }
   conversation?.confirmRequest()
+  if (useLegacyProfile) {
+    for (const [name, contents] of fixtures)
+      assert.equal(await readFile(join(root, name), 'utf8'), contents, 'O Stage alterou um arquivo do perfil histórico.')
+    assert.ok(existsSync(join(root, 'native-stage-profile')), 'O Stage não criou seu perfil Chromium separado dentro do diretório histórico.')
+    assert.ok(!existsSync(join(profile, 'Lia', 'lia-product.json')), 'O Launcher criou uma segunda configuração.')
+  }
   if (packaged)
     await checkPackagedProcessesExited(packageDirectory)
   const conversationSource = installedConversation ? (localPort ? 'operator-loopback' : 'synthetic-loopback') : null
-  const lifecycle = { legacyProfileReopened: useLegacyProfile, conversationSource, conversationThroughLauncher: installedConversation && !directStageConversation, packageProcessesExited: packaged ? true : null, installedConversation, airiDirectoryAbsent, packaged, installed: Boolean(installedExecutable), nativeWindows, registryRemoved: true, stageMainExited: true }
+  const lifecycle = { legacyProfileReopened: useLegacyProfile, legacyProfilePreserved: useLegacyProfile ? true : null, conversationSource, conversationThroughLauncher: installedConversation && !directStageConversation, packageProcessesExited: packaged ? true : null, installedConversation, airiDirectoryAbsent, packaged, installed: Boolean(installedExecutable), nativeWindows, registryRemoved: true, stageMainExited: true }
   if (!upgradeProfile)
     await writeFile(join(evidence, 'report.json'), JSON.stringify(lifecycle, null, 2), { flag: 'wx' })
   console.log(JSON.stringify(lifecycle))
