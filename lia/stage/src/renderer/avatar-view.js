@@ -1,5 +1,5 @@
-import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm'
-import { AnimationMixer, Box3, Color, DirectionalLight, HemisphereLight, LoadingManager, OrthographicCamera, Scene, Vector3, WebGLRenderer } from 'three'
+import { VRMExpressionMorphTargetBind, VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm'
+import { AnimationMixer, Box3, Color, DirectionalLight, HemisphereLight, LoadingManager, OrthographicCamera, PropertyBinding, Scene, Vector3, WebGLRenderer } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
 import { validateLocalAvatar } from './avatar-file.js'
@@ -25,6 +25,33 @@ function relaxStaticArms(vrm) {
   vrm.update(0)
 }
 
+function prepareEmbeddedClip(vrm, clip) {
+  const rawBones = new Set(Object.values(vrm.humanoid.rawHumanBones).map(({ node }) => node))
+  const animatedMorphMeshes = new Set()
+  for (const track of clip.tracks) {
+    const { nodeName, propertyName } = PropertyBinding.parseTrackName(track.name)
+    const node = PropertyBinding.findNode(vrm.scene, nodeName)
+    // glTF keys target the raw joints. The VRM pose copy would overwrite those keys.
+    if ((propertyName === 'position' || propertyName === 'quaternion') && rawBones.has(node))
+      vrm.humanoid.autoUpdateHumanBones = false
+    if (propertyName === 'morphTargetInfluences' && node?.morphTargetInfluences)
+      animatedMorphMeshes.add(node)
+  }
+
+  const sharedMorphs = new Map()
+  for (const expression of vrm.expressionManager?.expressions ?? []) {
+    for (const bind of expression.binds) {
+      if (!(bind instanceof VRMExpressionMorphTargetBind))
+        continue
+      for (const mesh of bind.primitives) {
+        if (animatedMorphMeshes.has(mesh))
+          sharedMorphs.set(`${mesh.uuid}:${bind.index}`, { weights: mesh.morphTargetInfluences, index: bind.index, authored: 0 })
+      }
+    }
+  }
+  return [...sharedMorphs.values()]
+}
+
 export function createAvatarView(canvas) {
   const renderer = new WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'low-power' })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -47,6 +74,7 @@ export function createAvatarView(canvas) {
   let disposed = false
   let renderingEnabled = true
   let mixer
+  let sharedMorphs = []
   let avatar
   let timer
   let previousFrame
@@ -56,20 +84,24 @@ export function createAvatarView(canvas) {
     const preset = phaseExpressions.get(expressionPhase)
     const expressions = avatar.expressionManager
     const original = preset ? expressions?.getValue(preset.name) : null
-    if (typeof original !== 'number') {
-      avatar.update(elapsed)
-      renderer.render(scene, camera)
-      return
-    }
-
-    // Blend the presentation pose over any facial weights set by the clip.
-    expressions.setValue(preset.name, Math.max(original, preset.weight))
+    const hasPreset = typeof original === 'number'
+    if (hasPreset)
+      expressions.setValue(preset.name, Math.max(original, preset.weight))
+    for (const morph of sharedMorphs)
+      morph.authored = morph.weights[morph.index]
     try {
       avatar.update(elapsed)
+      // VRM rebuilds its bound weights from zero; add the embedded clip for this frame.
+      for (const { weights, index, authored } of sharedMorphs)
+        weights[index] += authored
       renderer.render(scene, camera)
     }
     finally {
-      expressions.setValue(preset.name, original)
+      // The mixer may skip writing an unchanged sample on the next frame.
+      for (const { weights, index, authored } of sharedMorphs)
+        weights[index] = authored
+      if (hasPreset)
+        expressions.setValue(preset.name, original)
     }
   }
 
@@ -120,6 +152,7 @@ export function createAvatarView(canvas) {
       VRMUtils.deepDispose(model)
       model = undefined
       mixer = undefined
+      sharedMorphs = []
       avatar = undefined
     }
   }
@@ -167,8 +200,10 @@ export function createAvatarView(canvas) {
       bounds = nextBounds
       scene.add(model)
       if (clip) {
+        sharedMorphs = prepareEmbeddedClip(vrm, clip)
         mixer = new AnimationMixer(model)
         mixer.clipAction(clip).play()
+        mixer.update(0)
       }
       render()
       updateAnimation()
