@@ -1,5 +1,5 @@
 import type { LiaRuntimeService } from '../../../core/src/runtime/index.ts'
-import type { LiaMemoryMutation } from '../../../core/src/memory/contracts.ts'
+import type { LiaMemoryMutation, LiaMemoryScope } from '../../../core/src/memory/contracts.ts'
 
 import { mkdirSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
@@ -116,7 +116,10 @@ async function main(): Promise<void> {
   const persona = createStagePersona(join(app.getPath('userData'), 'personality'))
   const send = createStageChat({
     storage: history,
-    recallMemory: memory.recall,
+    async recallMemory(query) {
+      const context = await history.memoryContext().catch(() => ({}))
+      return memory.recall(query, context)
+    },
     readCredential: providerId => vault.getSecret(providerId, 'apiKey'),
     readPersona: async id => (await persona.read(id))?.prompt,
     readProduct,
@@ -233,7 +236,12 @@ async function main(): Promise<void> {
     finally { imageCopy = undefined }
   })
 
-  ipcMain.handle(stageMemoryGet, event => authorized(event) ? memory.get() : { ok: false, code: 'invalid' })
+  ipcMain.handle(stageMemoryGet, async (event) => {
+    if (!authorized(event))
+      return { ok: false, code: 'invalid' }
+    const context = await history.memoryContext().catch(() => ({}))
+    return memory.get(context)
+  })
   let exportingMemory = false
   ipcMain.handle(stageMemoryExport, async (event) => {
     const owner = window
@@ -261,12 +269,34 @@ async function main(): Promise<void> {
     finally { exportingMemory = false }
   })
   let confirmingMemoryClear = false
-  ipcMain.handle(stageMemoryMutate, async (event, request: LiaMemoryMutation) => {
+  ipcMain.handle(stageMemoryMutate, async (event, request: LiaMemoryMutation, kind: unknown, expectedConversation: unknown) => {
     const owner = window
-    if (!owner || !authorized(event) || active || confirmingMemoryClear)
+    if (!owner || !authorized(event) || active || updatingHistory || confirmingMemoryClear)
       return { ok: false, code: 'unavailable' }
-    if (request?.action !== 'clear' || request.confirmed !== true)
-      return memory.mutate(request)
+    if (request?.action !== 'clear' || request.confirmed !== true) {
+      updatingHistory = true
+      try {
+        const context = await history.memoryContext()
+        if (!authorized(event) || expectedConversation !== context.conversationId)
+          return { ok: false, code: 'unavailable' }
+        let scope: LiaMemoryScope | undefined
+        if (request?.action === 'save' && request.id === undefined && kind !== undefined) {
+          if (kind === 'global')
+            scope = { kind }
+          else if (kind === 'project' && context.projectId)
+            scope = { kind, projectId: context.projectId }
+          else if (kind === 'conversation')
+            scope = { kind, conversationId: context.conversationId, ...(context.projectId ? { projectId: context.projectId } : {}) }
+          else
+            return { ok: false, code: 'invalid' }
+        }
+        else if (kind !== undefined)
+          return { ok: false, code: 'invalid' }
+        return await memory.mutate(request, context, scope)
+      }
+      catch { return { ok: false, code: 'unavailable' } }
+      finally { updatingHistory = false }
+    }
     confirmingMemoryClear = true
     try {
       const locale = await readLocale()
@@ -378,11 +408,11 @@ async function main(): Promise<void> {
     }
   })
   ipcMain.handle(stageConversationChange, async (event, action: unknown, id: unknown) => {
-    if (!authorized(event) || updatingHistory || active)
+    if (!authorized(event) || updatingHistory || active || confirmingMemoryClear)
       return undefined
-    if (action !== 'create' && action !== 'select' && action !== 'delete')
+    if (action !== 'create' && action !== 'create-project' && action !== 'select' && action !== 'delete')
       return undefined
-    if (action === 'select' ? typeof id !== 'string' || id.length > 36 : id !== undefined)
+    if (action === 'select' || action === 'create-project' ? typeof id !== 'string' || id.length > 60 : id !== undefined)
       return undefined
     updatingHistory = true
     try {

@@ -65,7 +65,8 @@ contextBridge.exposeInMainWorld('liaStageImage', {
 contextBridge.exposeInMainWorld('liaStageMemory', {
   get: () => ipcRenderer.invoke(stageMemoryGet),
   exportNotes: () => ipcRenderer.invoke(stageMemoryExport),
-  mutate: (request: LiaMemoryMutation) => ipcRenderer.invoke(stageMemoryMutate, request),
+  mutate: (request: LiaMemoryMutation, scope: string | undefined, conversationId: string) =>
+    ipcRenderer.invoke(stageMemoryMutate, request, scope, conversationId),
 })
 
 contextBridge.exposeInMainWorld('liaStageChat', {
@@ -75,7 +76,7 @@ contextBridge.exposeInMainWorld('liaStageChat', {
   changePersona: (input: string | Uint8Array | null | { attributes: LiaPersonalityAttributes, contextId: LiaIntensityContextId }) =>
     ipcRenderer.invoke(stagePersonaChange, input),
   activePersona: () => ipcRenderer.invoke(stagePersonaGet),
-  changeConversation: (action: 'create' | 'select' | 'delete', id?: string) => ipcRenderer.invoke(stageConversationChange, action, id),
+  changeConversation: (action: 'create' | 'create-project' | 'select' | 'delete', id?: string) => ipcRenderer.invoke(stageConversationChange, action, id),
   importHistory: (file: string) => ipcRenderer.invoke(stageHistoryImport, file),
   changeHistory: (action: 'enable' | 'disable' | 'clear') => ipcRenderer.invoke(stageHistoryChange, action),
   send: (message: string, image?: Uint8Array, intent?: boolean | { capability: 'local-clock', mode: 'suggest' }) => ipcRenderer.invoke(stageChatSend, message, image, intent),

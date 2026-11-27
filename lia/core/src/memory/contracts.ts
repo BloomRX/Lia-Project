@@ -15,8 +15,13 @@ export interface LiaMemoryMetadata {
   createdAt: string
   expiresAt?: string
 }
-export interface LiaMemoryEntry { id: string, text: string, updatedAt: string, metadata?: LiaMemoryMetadata }
-export interface LiaMemoryState { schemaVersion: 1, enabled: boolean, entries: LiaMemoryEntry[] }
+export type LiaMemoryScope
+  = | { kind: 'global' }
+    | { kind: 'project', projectId: string }
+    | { kind: 'conversation', conversationId: string, projectId?: string }
+export type LiaMemoryContext = { projectId?: string, conversationId?: string }
+export interface LiaMemoryEntry { id: string, text: string, updatedAt: string, metadata?: LiaMemoryMetadata, scope?: LiaMemoryScope }
+export interface LiaMemoryState { schemaVersion: 1 | 2, enabled: boolean, entries: LiaMemoryEntry[] }
 export type LiaMemoryResult<T = LiaMemoryState> = { ok: true, value: T } | { ok: false, code: 'invalid' | 'unavailable' | 'limit' | 'missing' }
 export type LiaMemoryMutation
   = | { action: 'enable', enabled: boolean }

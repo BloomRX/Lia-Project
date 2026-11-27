@@ -1,4 +1,4 @@
-import type { LiaMemoryEntry, LiaMemoryState } from './contracts.ts'
+import type { LiaMemoryContext, LiaMemoryEntry, LiaMemoryState } from './contracts.ts'
 
 import { LIA_MEMORY_LIMITS } from './contracts.ts'
 
@@ -7,13 +7,20 @@ function terms(text: string): Set<string> {
   return new Set((text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []).filter(term => !stopwords.has(term)))
 }
 
+export function memoryInContext(entry: Pick<LiaMemoryEntry, 'scope'>, context: LiaMemoryContext): boolean {
+  const scope = entry.scope
+  return !scope || scope.kind === 'global'
+    || (scope.kind === 'project' && scope.projectId === context.projectId)
+    || (scope.kind === 'conversation' && scope.conversationId === context.conversationId && scope.projectId === context.projectId)
+}
+
 /** Lexical retrieval only: no chat history, extraction, embeddings or network. */
-export function selectRelevantMemories(state: LiaMemoryState, query: string, now = Date.now()): LiaMemoryEntry[] {
+export function selectRelevantMemories(state: LiaMemoryState, query: string, now = Date.now(), context: LiaMemoryContext = {}): LiaMemoryEntry[] {
   if (!state.enabled || typeof query !== 'string' || !query.trim())
     return []
   const queryTerms = terms(query.slice(0, LIA_MEMORY_LIMITS.query))
   return state.entries
-    .filter(entry => !entry.metadata?.expiresAt || Date.parse(entry.metadata.expiresAt) > now)
+    .filter(entry => memoryInContext(entry, context) && (!entry.metadata?.expiresAt || Date.parse(entry.metadata.expiresAt) > now))
     .map((entry, order) => ({ entry, order, score: [...terms(entry.text)].filter(term => queryTerms.has(term)).length }))
     .filter(item => item.score > 0)
     .sort((a, b) => b.score - a.score || a.order - b.order)
@@ -21,8 +28,8 @@ export function selectRelevantMemories(state: LiaMemoryState, query: string, now
     .map(item => item.entry)
 }
 
-export function buildMemoryContext(state: LiaMemoryState, query: string): string {
-  const selected = selectRelevantMemories(state, query)
+export function buildMemoryContext(state: LiaMemoryState, query: string, context: LiaMemoryContext = {}): string {
+  const selected = selectRelevantMemories(state, query, Date.now(), context)
   if (!selected.length)
     return ''
   // JSON quoting keeps remembered text explicitly separate from instructions.

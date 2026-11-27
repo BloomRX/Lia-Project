@@ -2,6 +2,7 @@ import { maxStageImageBytes } from '../shared/chat-image.ts'
 
 import { createExpressionState } from './expression-state.ts'
 import { t } from './locale.js'
+import { setMemoryContext } from './memory.js'
 
 const form = document.querySelector('form')
 const message = document.querySelector('#message')
@@ -42,6 +43,8 @@ const historyStatus = document.querySelector('#history-status')
 const historyImport = document.querySelector('#history-import')
 const historyImportFile = document.querySelector('#history-import-file')
 const conversation = document.querySelector('#conversation')
+const projectName = document.querySelector('#conversation-project-name')
+const newProject = document.querySelector('#conversation-project')
 const newConversation = document.querySelector('#conversation-add')
 const deleteConversation = document.querySelector('#conversation-delete')
 const record = document.querySelector('#record')
@@ -254,9 +257,10 @@ function updateClearAction() {
 
 function showConversation(state) {
   activeConversation = state.activeId
-  conversation.replaceChildren(...state.conversations.map(({ id, title }, index) =>
-    new Option(title || `${t('Conversa')} ${index + 1}`, id)))
+  conversation.replaceChildren(...state.conversations.map(({ id, title, projectName }, index) =>
+    new Option((projectName ? `${projectName} · ` : '') + (title || `${t('Conversa')} ${index + 1}`), id)))
   conversation.value = activeConversation
+  setMemoryContext({ conversationId: state.activeId, hasProject: Boolean(state.projectName) })
   messages.replaceChildren()
   for (const [index, turn] of state.turns.entries()) {
     const saved = { id: state.activeId, revision: state.revision, index }
@@ -278,7 +282,7 @@ async function changeConversation(action, id) {
     : (message.value || attachment || unsavedMessages) ? 'Trocar de conversa? O rascunho e as mensagens não guardadas serão descartados.' : undefined
   if (prompt && !window.confirm(t(prompt)))
     return
-  const controls = [send, conversation, newConversation, deleteConversation, historyEnabled, historyClear, record, imagePick, imageRemove]
+  const controls = [send, conversation, newConversation, newProject, deleteConversation, historyEnabled, historyClear, record, imagePick, imageRemove]
   controls.forEach(control => { control.disabled = true })
   message.readOnly = true
   historyImport.disabled = true
@@ -308,6 +312,13 @@ async function changeConversation(action, id) {
 }
 
 conversation.addEventListener('change', () => void changeConversation('select', conversation.value))
+newProject.addEventListener('click', () => {
+  const name = projectName.value.trim()
+  if (name)
+    void changeConversation('create-project', name)
+  else
+    projectName.focus()
+})
 newConversation.addEventListener('click', () => void changeConversation('create'))
 deleteConversation.addEventListener('click', () => void changeConversation('delete'))
 
@@ -495,6 +506,7 @@ try {
   showConversation(history)
   conversation.disabled = false
   newConversation.disabled = false
+  newProject.disabled = false
   deleteConversation.disabled = false
   historyEnabled.disabled = false
 }

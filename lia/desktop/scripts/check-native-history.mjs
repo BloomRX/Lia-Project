@@ -468,6 +468,64 @@ try {
   await page.getByText('Notas apagadas.', { exact: true }).waitFor()
   await submit(page, 'Ainda há notas do Observatório?', requests.length + 1)
   assert.doesNotMatch(JSON.stringify(requests.at(-1)), /filtro violeta|versão expirada/)
+  page.on('dialog', dialog => dialog.accept())
+  await openHistory(page)
+  const projectInput = () => page.getByLabel('Nome do novo projeto')
+  const createProject = async name => {
+    await projectInput().fill(name)
+    await page.getByRole('button', { name: 'Criar projeto com conversa' }).click()
+    await page.waitForFunction(label => document.querySelector('#conversation').selectedOptions[0]?.textContent.startsWith(label), name)
+  }
+  const scopedNote = async (scope, text) => {
+    await page.getByLabel('Escopo da nota').selectOption(scope)
+    await saveFixtureNote(text)
+  }
+  await createProject('Alfa')
+  await scopedNote('global', 'Farol global: âmbar.')
+  await scopedNote('project', 'Farol do projeto Alfa: verde.')
+  await scopedNote('conversation', 'Farol da conversa Alfa: violeta.')
+  await submit(page, 'Qual é o Farol?', requests.length + 1)
+  assert.match(requests.at(-1).messages.at(-1).content, /âmbar/)
+  assert.match(requests.at(-1).messages.at(-1).content, /verde/)
+  assert.match(requests.at(-1).messages.at(-1).content, /violeta/)
+  let selector = page.getByLabel('Conversa ativa')
+  const firstAlfa = await selector.inputValue()
+  await page.getByRole('button', { name: 'Nova conversa', exact: true }).click()
+  await page.waitForFunction(previous => document.querySelector('#conversation').value !== previous, firstAlfa)
+  await submit(page, 'Qual é o Farol?', requests.length + 1)
+  assert.match(requests.at(-1).messages.at(-1).content, /verde/)
+  assert.doesNotMatch(requests.at(-1).messages.at(-1).content, /violeta/)
+  await createProject('Beta')
+  await scopedNote('project', 'Farol do projeto Beta: azul.')
+  await submit(page, 'Qual é o Farol?', requests.length + 1)
+  assert.match(requests.at(-1).messages.at(-1).content, /azul/)
+  assert.doesNotMatch(JSON.stringify(requests.at(-1)), /verde|violeta/)
+  await app.close()
+  app = await launch()
+  page = await app.firstWindow()
+  page.setDefaultTimeout(10_000)
+  page.on('dialog', dialog => dialog.accept())
+  await openHistory(page)
+  selector = page.getByLabel('Conversa ativa')
+  await selector.selectOption(firstAlfa)
+  await submit(page, 'Qual é o Farol?', requests.length + 1)
+  assert.match(requests.at(-1).messages.at(-1).content, /verde/)
+  assert.match(requests.at(-1).messages.at(-1).content, /violeta/)
+  assert.doesNotMatch(JSON.stringify(requests.at(-1)), /azul/)
+  await page.getByText('Memória', { exact: true }).click()
+  await page.getByText('Farol da conversa Alfa: violeta.', { exact: true }).waitFor()
+  assert.equal(await page.getByText('Farol do projeto Beta: azul.', { exact: true }).count(), 0)
+  const scopedExport = join(root, 'scoped-memory-export.json')
+  await app.evaluate(({ dialog }, filePath) => {
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath })
+  }, scopedExport)
+  await page.getByRole('button', { name: 'Exportar notas' }).click()
+  await page.getByText('Notas exportadas.', { exact: true }).waitFor()
+  const scopedSnapshot = JSON.parse(await readFile(scopedExport, 'utf8'))
+  assert.equal(scopedSnapshot.schemaVersion, 2)
+  assert.deepEqual(scopedSnapshot.entries.map(entry => entry.scope?.kind ?? 'global'), ['global', 'project', 'conversation', 'project'])
+  assert.notEqual(scopedSnapshot.entries[1].scope.projectId, scopedSnapshot.entries[3].scope.projectId)
+  await page.screenshot({ path: join(root, 'memory-scopes.png'), fullPage: true })
   const report = { service: 'synthetic local HTTP', optIn: true, reopened: true, resumed: true, legacyTextImported: true, cancellationPreservedHistory: true, cleared: true, clearDisabledWhenEmpty: true, rateLimitSanitized: true, refusedImageWithoutVision: true, conversationsIsolated: true, selectionRestored: true, deletionConfirmed: true, builtInPersonaInRequest: true, importedPersonaInRequest: true, importedPersonaRestored: true, personaContextIsolated: true, kokoroSelectedByLauncher: Boolean(kokoroVoice), kokoroVoice: kokoroVoice ?? (withVoice ? 'default' : null), localKokoroMutedPlayback: withVoice ? 'cancelled, retried, played and stopped' : null, autoPlay: withVoice ? 'opt-in, persisted, played, opted out' : null, customizedTraitsPersisted: true }
   report.designFoundation = { colorsApplied: true, keyboardFocusVisible: true }
   report.simulatedExpression = { successfulReply: true, localMutedPlayback: withVoice ? true : null }
@@ -476,6 +534,7 @@ try {
   report.clockConfirmation = { dialogResponse: 'injected', deniedWithoutRequest: true, acceptedRoundTrip: true }
   report.identityStableWithImportedPersona = true
   report.singleMessageRemoved = { dialogResponse: 'injected', remainingReplyVisible: true }
+  report.scopedMemory = { explicitScope: true, projectIsolation: true, conversationIsolation: true, globalsRecalled: true, restart: true, scopedExport: true }
   report.memoryLifecycle = { reopened: true, lexicalRecall: true, expiredExcluded: true, edited: true, exported: true, deletionExcluded: true, dialogResponse: 'injected' }
   report.memoryClear = { dialogResponse: 'injected', cancelPreservedNote: true, clearPreservedConversation: true, focusRestored: true }
   report.hubCatalog = { source: withPublishedHub ? 'published Hub index' : 'synthetic index', listed: listedHubCapabilities, filtered: true, inspected: true }

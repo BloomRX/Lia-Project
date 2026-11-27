@@ -1,10 +1,10 @@
-import type { LiaMemoryMetadata, LiaMemoryMetadataInput, LiaMemoryMutation, LiaMemoryResult, LiaMemoryState } from './contracts.ts'
+import type { LiaMemoryContext, LiaMemoryMetadata, LiaMemoryMetadataInput, LiaMemoryMutation, LiaMemoryResult, LiaMemoryScope, LiaMemoryState } from './contracts.ts'
 
 import { randomUUID } from 'node:crypto'
 import { link, lstat, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
-import { buildMemoryContext } from './context.ts'
+import { buildMemoryContext, memoryInContext } from './context.ts'
 import { LIA_MEMORY_CLASSIFICATIONS, LIA_MEMORY_KINDS, LIA_MEMORY_LIMITS } from './contracts.ts'
 
 const empty = (): LiaMemoryState => ({ schemaVersion: 1, enabled: false, entries: [] })
@@ -49,18 +49,34 @@ function parseMetadata(value: unknown): LiaMemoryMetadata {
   return { kind, classification, provenance: 'user', createdAt, ...(expiresAt === undefined ? {} : { expiresAt }) }
 }
 
+function validScope(value: unknown): value is LiaMemoryScope {
+  if (!object(value))
+    return false
+  const keys = Object.keys(value)
+  if (value.kind === 'global')
+    return keys.length === 1
+  if (value.kind === 'project')
+    return keys.length === 2 && validId(value.projectId)
+  return value.kind === 'conversation'
+    && (value.conversationId === 'initial' || validId(value.conversationId))
+    && (keys.length === 2 ? !Object.hasOwn(value, 'projectId') : keys.length === 3 && validId(value.projectId))
+}
+
 function parseState(value: unknown): LiaMemoryState {
-  if (!object(value) || value.schemaVersion !== 1 || typeof value.enabled !== 'boolean' || !Array.isArray(value.entries) || value.entries.length > LIA_MEMORY_LIMITS.entries)
+  if (!object(value) || (value.schemaVersion !== 1 && value.schemaVersion !== 2) || typeof value.enabled !== 'boolean' || !Array.isArray(value.entries) || value.entries.length > LIA_MEMORY_LIMITS.entries)
     throw new Error('invalid')
   const entries = value.entries.map((entry) => {
     if (!object(entry) || !validId(entry.id) || !validText(entry.text) || typeof entry.updatedAt !== 'string' || entry.updatedAt.length > 40 || !Number.isFinite(Date.parse(entry.updatedAt)))
       throw new Error('invalid')
     const metadata = entry.metadata === undefined ? undefined : parseMetadata(entry.metadata)
-    return { id: entry.id, text: entry.text, updatedAt: entry.updatedAt, ...(metadata ? { metadata } : {}) }
+    const scope = entry.scope
+    if (scope !== undefined && (value.schemaVersion !== 2 || !validScope(scope)))
+      throw new Error('invalid')
+    return { id: entry.id, text: entry.text, updatedAt: entry.updatedAt, ...(metadata ? { metadata } : {}), ...(scope ? { scope } : {}) }
   })
   if (new Set(entries.map(entry => entry.id)).size !== entries.length)
     throw new Error('invalid')
-  return { schemaVersion: 1, enabled: value.enabled, entries }
+  return { schemaVersion: value.schemaVersion, enabled: value.enabled, entries }
 }
 
 async function readDocument(path: string): Promise<LiaMemoryState | undefined> {
@@ -127,15 +143,17 @@ export function createLiaMemoryStore(params: { filePath: string }) {
         return fail('unavailable')
       }
     }),
-    get: () => serial(async (): Promise<LiaMemoryResult> => {
+    get: (context?: LiaMemoryContext) => serial(async (): Promise<LiaMemoryResult> => {
       try {
-        return { ok: true, value: await read() }
+        const state = await read()
+        return { ok: true, value: context ? { ...state, entries: state.entries.filter(entry => memoryInContext(entry, context)) } : state }
       }
       catch { return fail('unavailable') }
     }),
-    mutate: (request: LiaMemoryMutation) => serial(async (): Promise<LiaMemoryResult> => {
+    mutate: (request: LiaMemoryMutation, context: LiaMemoryContext = {}, scope?: LiaMemoryScope) => serial(async (): Promise<LiaMemoryResult> => {
       try {
-        if (!object(request))
+        if (!object(request) || Object.hasOwn(request, 'scope')
+          || (scope !== undefined && (!validScope(scope) || !memoryInContext({ scope }, context))))
           return fail('invalid')
         const state = await read()
         if (request.action === 'enable' && typeof request.enabled === 'boolean') {
@@ -143,7 +161,7 @@ export function createLiaMemoryStore(params: { filePath: string }) {
         }
         else if (request.action === 'save' && validText(request.text) && (request.id === undefined || validId(request.id))) {
           const existing = request.id ? state.entries.find(entry => entry.id === request.id) : undefined
-          if (request.id && !existing)
+          if (request.id && (!existing || !memoryInContext(existing, context)))
             return fail('missing')
           const now = new Date().toISOString()
           let metadata = existing?.metadata
@@ -168,11 +186,14 @@ export function createLiaMemoryStore(params: { filePath: string }) {
           else {
             if (state.entries.length >= LIA_MEMORY_LIMITS.entries)
               return fail('limit')
-            state.entries.push({ id: randomUUID(), text: request.text.trim(), updatedAt: now, ...(metadata ? { metadata } : {}) })
+            if (scope && scope.kind !== 'global')
+              state.schemaVersion = 2
+            state.entries.push({ id: randomUUID(), text: request.text.trim(), updatedAt: now, ...(metadata ? { metadata } : {}),
+              ...(scope && scope.kind !== 'global' ? { scope } : {}) })
           }
         }
         else if (request.action === 'remove' && validId(request.id)) {
-          if (!state.entries.some(entry => entry.id === request.id))
+          if (!state.entries.some(entry => entry.id === request.id && memoryInContext(entry, context)))
             return fail('missing')
           state.entries = state.entries.filter(entry => entry.id !== request.id)
         }
@@ -183,15 +204,15 @@ export function createLiaMemoryStore(params: { filePath: string }) {
           return fail('invalid')
         }
         await write(state)
-        return { ok: true, value: state }
+        return { ok: true, value: { ...state, entries: state.entries.filter(entry => memoryInContext(entry, context)) } }
       }
       catch { return fail('unavailable') }
     }),
-    recall: (query: string) => serial(async (): Promise<LiaMemoryResult<string>> => {
+    recall: (query: string, context: LiaMemoryContext = {}) => serial(async (): Promise<LiaMemoryResult<string>> => {
       if (typeof query !== 'string' || query.length > LIA_MEMORY_LIMITS.query)
         return fail('invalid')
       try {
-        return { ok: true, value: buildMemoryContext(await read(), query) }
+        return { ok: true, value: buildMemoryContext(await read(), query, context) }
       }
       catch { return fail('unavailable') }
     }),

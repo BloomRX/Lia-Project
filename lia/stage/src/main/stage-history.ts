@@ -16,6 +16,7 @@ interface Turn {
 interface Conversation {
   id: string
   enabled: boolean
+  project?: { id: string, name: string }
   turns: Turn[]
 }
 interface History {
@@ -68,9 +69,21 @@ export function createStageHistory(path: string) {
     return { id, enabled: false, turns: [] }
   }
 
+  function validProject(value: unknown) {
+    return object(value) && typeof value.id === 'string'
+      && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value.id)
+      && validProjectName(value.name)
+  }
+
+  function validProjectName(value: unknown): value is string {
+    return typeof value === 'string' && Boolean(value.trim()) && value.length <= 60
+      && !/[\r\n\t]/.test(value)
+  }
+
   function validConversation(value: unknown): value is Conversation {
     return object(value) && typeof value.id === 'string'
       && (value.id === initialId || /^[a-f0-9-]{36}$/.test(value.id))
+      && (value.project === undefined || validProject(value.project))
       && typeof value.enabled === 'boolean' && Array.isArray(value.turns)
       && value.turns.length <= maxTurns && value.turns.every(validTurn)
       && (value.enabled || value.turns.length === 0)
@@ -116,7 +129,9 @@ export function createStageHistory(path: string) {
       revision: revisionOf(current(state)),
       turns: turns.map(({ user, assistant }) => ({ user, assistant })),
       activeId: state.activeId,
-      conversations: state.conversations.map(({ id, turns }) => ({
+      projectName: current(state).project?.name,
+      conversations: state.conversations.map(({ id, turns, project }) => ({
+        ...(project ? { projectName: project.name } : {}),
         id,
         title: turns.find(turn => turn.user.trim())?.user.trim().slice(0, 50) ?? '',
       })),
@@ -136,13 +151,21 @@ export function createStageHistory(path: string) {
     async get() {
       return view(await read())
     },
-    async changeConversation(action: 'create' | 'select' | 'delete', id?: string) {
+    async memoryContext() {
       const state = await read()
-      if (action === 'create') {
+      return { conversationId: state.activeId, projectId: current(state).project?.id }
+    },
+    async changeConversation(action: 'create' | 'create-project' | 'select' | 'delete', id?: string) {
+      const state = await read()
+      if (action === 'create' || action === 'create-project') {
+        const currentProject = current(state).project
+        if (action === 'create-project' && !validProjectName(id))
+          return undefined
+        const project = action === 'create-project' ? { id: randomUUID(), name: id!.trim() } : currentProject
         if (state.conversations.length >= maxConversations)
           return undefined
         state.activeId = randomUUID()
-        state.conversations.push(conversation(state.activeId))
+        state.conversations.push({ ...conversation(state.activeId), ...(project ? { project } : {}) })
       }
       else if (action === 'delete') {
         state.conversations = state.conversations.filter(item => item.id !== state.activeId)
