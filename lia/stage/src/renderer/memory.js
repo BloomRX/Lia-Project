@@ -1,3 +1,4 @@
+import { setMarkdownContext } from './markdown-notes.js'
 import { t } from './locale.js'
 
 const memory = window.liaStageMemory
@@ -155,6 +156,7 @@ export function setMemoryContext(detail) {
   if (detail.conversationId === conversationId)
     return
   conversationId = detail.conversationId
+  setMarkdownContext(detail.hasProject)
   project.disabled = !detail.hasProject
   current = undefined
   entries.replaceChildren()

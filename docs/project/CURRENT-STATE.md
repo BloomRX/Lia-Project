@@ -2,6 +2,8 @@
 
 ## 0. Estado agora
 
+- **Memory V2.1-B.** O painel de Memória consulta Markdown local de uma pasta escolhida por projeto, em modo somente leitura. O conteúdo fica fora do chat. Veja [limites e gates](LIA-MEMORY-V2.1-B.md).
+
 - **Memory V2.1-A.** As notas podem ser globais, de projeto ou de conversa. O Main mantém os identificadores de contexto. Notas legadas permanecem globais. O [relatório de memória](LIA-MEMORY-V2.1-A.md) descreve a migração, os controles e os gates.
 
 - **Validação supervisionada de Skill.** O Stage envia somente a seleção confirmada no Main à CLI local do Agent Hub. O operador fornece um grant temporário de uso único. O painel mostra contagens, cancelamento e auditoria. O Electron Windows passou com a CLI oficial e respostas de confirmação injetadas. Consulte [provisionamento e evidências](LIA-EVOLUTION-PROGRAM-V1.md#incremento-da-meta-03--validação-estrutural-supervisionada).

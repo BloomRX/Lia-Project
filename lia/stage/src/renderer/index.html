@@ -200,6 +200,17 @@
           <button id="memory-clear" type="button" disabled data-translate>Apagar notas</button>
         </fieldset>
         <p id="memory-status" role="status"></p>
+        <section aria-labelledby="markdown-heading">
+          <h3 id="markdown-heading" data-translate>Notas Markdown externas</h3>
+          <p data-translate>Somente leitura. Os trechos aparecem aqui e ficam fora do chat.</p>
+          <button id="markdown-connect" type="button" disabled data-translate>Escolher pasta de notas Markdown</button>
+          <button id="markdown-disconnect" type="button" disabled data-translate>Desconectar pasta de notas</button>
+          <label for="markdown-query" data-translate>Buscar nas notas Markdown</label>
+          <input id="markdown-query" type="search" maxlength="200" disabled>
+          <button id="markdown-search" type="button" disabled data-translate>Buscar notas</button>
+          <p id="markdown-status" role="status"></p>
+          <ul id="markdown-results"></ul>
+        </section>
       </details>
     </main>
     <script type="module" src="./chat.js"></script>

@@ -5,7 +5,7 @@ import type { LiaIntensityContextId, LiaPersonalityAttributes } from '../../../c
 
 import { contextBridge, ipcRenderer } from 'electron'
 
-import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMemoryMutate, stageMicrophoneArm, stagePresenceClose, stagePresenceCommand, stagePresenceOpen, stagePresenceRead, stagePresenceRendered, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
+import { stageChatCancel, stageChatSend, stageChatSpeak, stageMarkdown, stageMemoryGet, stageMemoryMutate, stageMicrophoneArm, stagePresenceClose, stagePresenceCommand, stagePresenceOpen, stagePresenceRead, stagePresenceRendered, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
 import { stageConversationChange, stageHistoryChange, stageHistoryGet, stageHistoryImport, stageHistoryRemoveMessage, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
 import { stagePersonaChange, stagePersonaGet } from '../shared/chat-ipc.ts'
 import { stagePresenceReadPackagedAvatar, stagePresenceVisibility } from '../shared/chat-ipc.ts'
@@ -64,6 +64,8 @@ contextBridge.exposeInMainWorld('liaStageImage', {
 
 contextBridge.exposeInMainWorld('liaStageMemory', {
   get: () => ipcRenderer.invoke(stageMemoryGet),
+  markdown: (action: 'status' | 'search' | 'connect' | 'disconnect', query?: string) =>
+    ipcRenderer.invoke(stageMarkdown, action, query),
   exportNotes: () => ipcRenderer.invoke(stageMemoryExport),
   mutate: (request: LiaMemoryMutation, scope: string | undefined, conversationId: string) =>
     ipcRenderer.invoke(stageMemoryMutate, request, scope, conversationId),

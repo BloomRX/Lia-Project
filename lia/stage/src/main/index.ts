@@ -19,7 +19,7 @@ import { createLiaMemoryStore } from '../../../core/src/memory/store.ts'
 import { readPublishedHubCatalog } from '../../../core/src/hub/published-catalog.ts'
 import { startLiaRuntimeService } from '../../../core/src/runtime/index.ts'
 import { createTransportRepository } from '../../../core/src/transports/repository.ts'
-import { stageChatCancel, stageChatSend, stageChatSpeak, stageMemoryGet, stageMemoryMutate, stageMicrophoneArm, stagePresenceClose, stagePresenceCommand, stagePresenceOpen, stagePresenceRead, stagePresenceRendered, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
+import { stageChatCancel, stageChatSend, stageChatSpeak, stageMarkdown, stageMemoryGet, stageMemoryMutate, stageMicrophoneArm, stagePresenceClose, stagePresenceCommand, stagePresenceOpen, stagePresenceRead, stagePresenceRendered, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
 import { stageConversationChange, stageHistoryChange, stageHistoryGet, stageHistoryImport, stageHistoryRemoveMessage, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
 import { stagePersonaChange, stagePersonaGet } from '../shared/chat-ipc.ts'
 import { stagePresenceReadPackagedAvatar } from '../shared/chat-ipc.ts'
@@ -30,6 +30,7 @@ import { stageLocale, stageText } from '../shared/locale.ts'
 import { createStageHubSkill } from './stage-hub-skill.ts'
 import { createStageChat } from './stage-chat.ts'
 import { createStageImageCopy } from './stage-image-copy.ts'
+import { createStageMarkdown } from './stage-markdown.ts'
 import { createStageHistory } from './stage-history.ts'
 import { createStageHost } from './stage-host.ts'
 import { createStagePersona, defaultTraits, readPackagedAvatar } from './stage-persona.ts'
@@ -234,6 +235,41 @@ async function main(): Promise<void> {
       })
     }
     finally { imageCopy = undefined }
+  })
+
+  const markdown = createStageMarkdown(join(app.getPath('userData'), 'lia-markdown-sources.json'))
+  ipcMain.handle(stageMarkdown, async (event, action: unknown, query: unknown) => {
+    if (!authorized(event))
+      return { status: 'unavailable' }
+    const owner = window
+    const context = await history.memoryContext().catch(() => undefined)
+    if (!owner || !context?.projectId)
+      return { status: 'no-project' }
+    const project = context.projectId
+    const stillActive = async () => authorized(event)
+      && (await history.memoryContext().catch(() => undefined))?.conversationId === context.conversationId
+    if (!await stillActive())
+      return { status: 'cancelled' }
+    let result
+    if (action === 'status')
+      result = await markdown.status(project)
+    else if (action === 'search')
+      result = await markdown.search(project, query)
+    else if (action === 'disconnect')
+      result = await markdown.disconnect(project)
+    else if (action === 'connect') {
+      result = await markdown.connect(project, async () => {
+        const locale = await readLocale()
+        if (!await stillActive())
+          return undefined
+        const chosen = await dialog.showOpenDialog(owner, {
+          title: stageText(locale, 'Escolher pasta de notas Markdown'),
+          properties: ['openDirectory'],
+        })
+        return !chosen.canceled && await stillActive() ? chosen.filePaths[0] : undefined
+      })
+    }
+    return result && await stillActive() ? result : { status: 'cancelled' }
   })
 
   ipcMain.handle(stageMemoryGet, async (event) => {
