@@ -28,26 +28,23 @@ function readSource(relative: string): string {
 const HOME_VUE = () => readSource('./HomeView.vue')
 const HOME_VM = () => readSource('./home-vm.ts')
 
-describe('home uses the 8.0A foundation (A)', () => {
+describe('home uses the R04 foundation (A)', () => {
   it('a: Home is built on the Lia primitives and semantic tokens', () => {
     const source = HOME_VUE()
-    for (const primitive of ['LiaPanel', 'LiaButton', 'LiaStatusChip']) {
+    for (const primitive of ['LiaPanel', 'LiaButton']) {
       expect(source, primitive).toContain(`import ${primitive} from '../components/lia/${primitive}.vue'`)
       expect(source, `${primitive} used`).toContain(`<${primitive}`)
     }
     const styleBlock = source.slice(source.indexOf('<style scoped>'))
     for (const token of [
-      '--lia-space-3',
-      '--lia-space-6',
-      '--lia-space-8',
-      '--lia-text-md',
-      '--lia-text-2xl',
-      '--lia-text-secondary',
-      '--lia-accent',
-      '--lia-border-accent',
-      '--lia-font-bold',
-      '--lia-status-error',
-      '--lia-status-warning',
+      '--r04-lowest',
+      '--r04-muted',
+      '--r04-primary',
+      '--r04-on-primary',
+      '--r04-focus',
+      '--r04-mint',
+      '--r04-font',
+      '--r04-error',
     ]) {
       expect(styleBlock, token).toContain(`var(${token})`)
     }
@@ -62,7 +59,7 @@ describe('the primary action keeps the existing launch path (B, F)', () => {
     expect(source).toContain('service is not ready')
     expect(source).toContain('serviço de IA não está pronto')
     expect(source).toContain('emit(\'refresh\')')
-    expect(source).toContain(':disabled="busy || conversationStarting || conversationStopping || !readinessKnown"')
+    expect(source).toContain(':disabled="!canConverse"')
     expect(source).toContain('{{ conversationLabel }}')
     expect(source).toContain("emit('open-ai')")
     expect(homeConversationLabelVm({ ai: { ready: false } })).toBe('Configurar IA')
@@ -78,9 +75,10 @@ describe('the primary action keeps the existing launch path (B, F)', () => {
     expect(homeConversationStartingVm({ stage: { state: { phase: 'running' } } })).toBe(false)
 
     // IA readiness derives from the SAME home-status fact.
-    expect(homeAiChipVm({ ai: { ready: true } })).toEqual({ label: 'IA pronta', variant: 'ready' })
+    expect(homeAiChipVm({ ai: { ready: true } })).toEqual({ label: 'Pronta para conversar', variant: 'ready' })
     expect(homeAiChipVm({ ai: { ready: false } })).toEqual({ label: 'IA a configurar', variant: 'warning' })
-    expect(homeAiChipVm(undefined)).toEqual({ label: 'IA a configurar', variant: 'warning' })
+    expect(homeAiChipVm(undefined)).toEqual({ label: 'Verificando prontidão…', variant: 'unknown' })
+    expect(homeAiChipVm({ ai: { ready: true } }, 'en-US')).toEqual({ label: 'Ready to talk', variant: 'ready' })
 
     // The honest blocker appears only while IA is unconfigured.
     expect(homeBlockerHintVm({ ai: { ready: false } })).toContain('IA & Recursos')
@@ -150,11 +148,12 @@ describe('logic stays out of the view (G)', () => {
 describe('home fits the shell (H)', () => {
   it('h: the page renders safely inside the shell structure - bounded width, scroll-friendly, no overflow traps', () => {
     const source = HOME_VUE()
-    expect(source).toMatch(/<template>\s*<section class="home">/)
+    expect(source).toMatch(/<template>\s*<section class="home" aria-labelledby="home-title">/)
     const styleBlock = source.slice(source.indexOf('<style scoped>'))
-    // Bounded + centered inside the stage; never forces a width.
-    expect(styleBlock).toContain('max-width: 760px')
-    expect(styleBlock).toContain('margin: 0 auto')
+    expect(styleBlock).toContain('min-block-size: 100%')
+    expect(styleBlock).toContain('max-width: 426px')
+    expect(styleBlock).toContain('@media (max-width: 1040px)')
+    expect(styleBlock).toContain('@media (max-width: 720px)')
     expect(styleBlock).toContain('min-width: 0')
     // Wrapping chips never create a horizontal overflow line.
     expect(styleBlock).toContain('flex-wrap: wrap')
@@ -182,7 +181,7 @@ describe('8.0A-5 minimal first-run choice', () => {
     expect(HOME_VUE()).toContain('setup?: { completed?: boolean }')
     const app = readSource('../App.vue')
     expect(app).toContain('setup.value = config?.snapshot?.setup')
-    expect(app).toContain('{ language, readiness, setup }')
+    expect(app).toContain('{ readiness, setup, statusError }')
   })
 
   it('c: "Completa" writes voice.enabled=true + setup.completed=true', () => {
@@ -216,7 +215,7 @@ describe('8.0A-5 minimal first-run choice', () => {
   it('g: the first-run marker never blocks Conversar (no modal, no gate)', () => {
     const source = HOME_VUE()
     // Conversar follows only conversation lifecycle, never the setup marker...
-    expect(source).toContain(':disabled="busy || conversationStarting || conversationStopping || !readinessKnown"')
+    expect(source).toContain(':disabled="!canConverse"')
     // ...the first-run flag gates the panel and NOTHING else...
     expect((source.match(/v-if="firstRunVisible"/g) ?? []).length).toBe(1)
     expect(source).not.toMatch(/firstRun(Visible|Done|Busy).*conversar|conversar.*firstRun/i)
@@ -239,6 +238,6 @@ describe('8.0A-5 minimal first-run choice', () => {
     expect(styleBlock).not.toMatch(/#[0-9a-f]{3,8}\b/i)
     expect(styleBlock).not.toMatch(/rgba?\(/i)
     for (const variable of [...styleBlock.matchAll(/var\(([^)]+)\)/g)].map(match => match[1].trim()))
-      expect(variable).toMatch(/^--lia-/)
+      expect(variable).toMatch(/^--r04-/)
   })
 })

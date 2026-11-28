@@ -1,0 +1,43 @@
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  src: url('/fonts/PlusJakartaSans-Variable.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+}
+
+/* Launcher rail and Home, from the V1.2.0 Foundation and R04 handoff. */
+.shell,
+.home {
+  --r04-canvas: #141122;
+  --r04-lowest: #0f0c1d;
+  --r04-surface: #201d2f;
+  --r04-high: #2b283a;
+  --r04-highest: #363245;
+  --r04-primary: #ff4a8e;
+  --r04-on-primary: #590028;
+  --r04-focus: #ffb1c5;
+  --r04-lavender: #ddb8ff;
+  --r04-mint: #4edea3;
+  --r04-error: #ffb4ab;
+  --r04-ink: #e6dff8;
+  --r04-muted: #e3bdc5;
+  --r04-selection: #62259b;
+  --r04-selection-text: #d1a1ff;
+  --r04-rule: #5b3f46;
+  --r04-outline: #aa888f;
+  --r04-font: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif;
+}
+
+.home {
+  --r04-mask-strong: rgb(0 0 0 / 76%);
+  --r04-mask-medium: rgb(0 0 0 / 42%);
+  --r04-mask-faint: rgb(0 0 0 / 12%);
+  --r04-mask-soft: rgb(0 0 0 / 18%);
+  --r04-wide-glow:
+    radial-gradient(ellipse 56% 87% at 13% 43%, color-mix(in srgb, var(--r04-selection) 38%, transparent), transparent 78%),
+    linear-gradient(102deg, var(--r04-surface), var(--r04-lowest) 67%);
+  --r04-compact-glow:
+    linear-gradient(147deg, transparent 17%, color-mix(in srgb, var(--r04-primary) 9%, transparent) 34%, transparent 49%),
+    radial-gradient(ellipse 66% 67% at 96% 40%, color-mix(in srgb, var(--r04-selection) 45%, transparent), transparent 87%);
+}

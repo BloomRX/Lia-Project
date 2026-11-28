@@ -1,4 +1,5 @@
 @import '../../../../assets/styles/lia-foundation.css';
+@import './styles/home-r04-tokens.css';
 
 :root {
   --lia-bg: var(--lia-foundation-background);

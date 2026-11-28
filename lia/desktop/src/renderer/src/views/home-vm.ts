@@ -9,15 +9,18 @@
 
 export interface HomeAiChipVm {
   label: string
-  variant: 'ready' | 'warning'
+  variant: 'ready' | 'warning' | 'unknown'
 }
 
 /** IA/conversation readiness, in product words (never infrastructure detail). */
-export function homeAiChipVm(status: unknown): HomeAiChipVm {
-  const ready = Boolean((status as Record<string, any> | undefined)?.ai?.ready)
-  return ready
-    ? { label: 'IA pronta', variant: 'ready' }
-    : { label: 'IA a configurar', variant: 'warning' }
+export function homeAiChipVm(status: unknown, language?: string): HomeAiChipVm {
+  const ready = (status as Record<string, any> | undefined)?.ai?.ready
+  const english = language?.startsWith('en')
+  if (ready === true)
+    return { label: english ? 'Ready to talk' : 'Pronta para conversar', variant: 'ready' }
+  if (ready === false)
+    return { label: english ? 'AI setup needed' : 'IA a configurar', variant: 'warning' }
+  return { label: english ? 'Checking readiness…' : 'Verificando prontidão…', variant: 'unknown' }
 }
 
 /**
