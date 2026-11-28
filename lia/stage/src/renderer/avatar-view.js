@@ -1,5 +1,5 @@
-import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm'
-import { AnimationMixer, Box3, Color, DirectionalLight, HemisphereLight, LoadingManager, OrthographicCamera, Scene, Vector3, WebGLRenderer } from 'three'
+import { VRMExpressionMorphTargetBind, VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm'
+import { AnimationMixer, Box3, Color, DirectionalLight, HemisphereLight, LoadingManager, OrthographicCamera, PropertyBinding, Scene, Vector3, WebGLRenderer } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
 import { validateLocalAvatar } from './avatar-file.js'
@@ -9,6 +9,9 @@ const phaseExpressions = new Map([
   ['responded', { name: 'happy', weight: 0.55 }],
   ['speaking', { name: 'aa', weight: 0.18 }],
 ])
+const frameInterval = 1000 / 24
+const blinkInterval = 4_000
+const blinkFrames = [0.5, 1, 1, 0.5, 0]
 
 function relaxStaticArms(vrm) {
   for (const side of ['left', 'right']) {
@@ -23,6 +26,51 @@ function relaxStaticArms(vrm) {
     shoulder.rotateZ(-Math.sign(direction.x) * Math.PI / 3)
   }
   vrm.update(0)
+}
+
+function prepareEmbeddedClip(vrm, clip) {
+  const rawBones = new Set(Object.values(vrm.humanoid.rawHumanBones).map(({ node }) => node))
+  const animatedMorphMeshes = new Set()
+  for (const track of clip.tracks) {
+    const { nodeName, propertyName } = PropertyBinding.parseTrackName(track.name)
+    const node = PropertyBinding.findNode(vrm.scene, nodeName)
+    // glTF keys target the raw joints. The VRM pose copy would overwrite those keys.
+    if ((propertyName === 'position' || propertyName === 'quaternion') && rawBones.has(node))
+      vrm.humanoid.autoUpdateHumanBones = false
+    if (propertyName === 'morphTargetInfluences' && node?.morphTargetInfluences)
+      animatedMorphMeshes.add(node)
+  }
+
+  const sharedMorphs = new Map()
+  for (const expression of vrm.expressionManager?.expressions ?? []) {
+    for (const bind of expression.binds) {
+      if (!(bind instanceof VRMExpressionMorphTargetBind))
+        continue
+      for (const mesh of bind.primitives) {
+        if (animatedMorphMeshes.has(mesh))
+          sharedMorphs.set(`${mesh.uuid}:${bind.index}`, { weights: mesh.morphTargetInfluences, index: bind.index, authored: 0 })
+      }
+    }
+  }
+  return [...sharedMorphs.values()]
+}
+
+function hasIdleBlink(vrm, sharedMorphs) {
+  let hasTarget = false
+  for (const bind of vrm.expressionManager?.getExpression('blink')?.binds ?? []) {
+    if (!(bind instanceof VRMExpressionMorphTargetBind) || !(bind.weight > 0))
+      continue
+    for (const mesh of bind.primitives) {
+      const weights = mesh.morphTargetInfluences
+      if (!Number.isFinite(weights?.[bind.index]))
+        continue
+      // A glTF morph track drives the whole vector, including zero weights.
+      if (sharedMorphs.some(morph => morph.weights === weights && morph.index === bind.index))
+        return false
+      hasTarget = true
+    }
+  }
+  return hasTarget
 }
 
 export function createAvatarView(canvas) {
@@ -47,8 +95,12 @@ export function createAvatarView(canvas) {
   let disposed = false
   let renderingEnabled = true
   let mixer
+  let sharedMorphs = []
   let avatar
   let timer
+  let blinkTimer
+  let blinkEnabled = false
+  let blinkWeight = 0
   let previousFrame
   let expressionPhase = 'idle'
 
@@ -56,20 +108,29 @@ export function createAvatarView(canvas) {
     const preset = phaseExpressions.get(expressionPhase)
     const expressions = avatar.expressionManager
     const original = preset ? expressions?.getValue(preset.name) : null
-    if (typeof original !== 'number') {
-      avatar.update(elapsed)
-      renderer.render(scene, camera)
-      return
-    }
-
-    // Blend the presentation pose over any facial weights set by the clip.
-    expressions.setValue(preset.name, Math.max(original, preset.weight))
+    const hasPreset = typeof original === 'number'
+    const originalBlink = blinkWeight > 0 ? expressions?.getValue('blink') : null
+    if (hasPreset)
+      expressions.setValue(preset.name, Math.max(original, preset.weight))
+    if (typeof originalBlink === 'number')
+      expressions.setValue('blink', Math.max(originalBlink, blinkWeight))
+    for (const morph of sharedMorphs)
+      morph.authored = morph.weights[morph.index]
     try {
       avatar.update(elapsed)
+      // VRM rebuilds its bound weights from zero; add the embedded clip for this frame.
+      for (const { weights, index, authored } of sharedMorphs)
+        weights[index] += authored
       renderer.render(scene, camera)
     }
     finally {
-      expressions.setValue(preset.name, original)
+      // The mixer may skip writing an unchanged sample on the next frame.
+      for (const { weights, index, authored } of sharedMorphs)
+        weights[index] = authored
+      if (hasPreset)
+        expressions.setValue(preset.name, original)
+      if (typeof originalBlink === 'number')
+        expressions.setValue('blink', originalBlink)
     }
   }
 
@@ -95,11 +156,32 @@ export function createAvatarView(canvas) {
   function stopAnimation() {
     clearInterval(timer)
     timer = undefined
+    clearTimeout(blinkTimer)
+    blinkTimer = undefined
+    blinkWeight = 0
+  }
+
+  function scheduleBlink(step = 0) {
+    blinkTimer = setTimeout(() => {
+      if (!renderingEnabled || document.hidden)
+        return
+      blinkWeight = blinkFrames[step]
+      if (!mixer && canvas.clientWidth && canvas.clientHeight)
+        draw()
+      scheduleBlink((step + 1) % blinkFrames.length)
+    }, step === 0 ? blinkInterval : frameInterval)
   }
 
   function updateAnimation() {
     stopAnimation()
-    if (!renderingEnabled || !mixer || document.hidden)
+    if (!renderingEnabled || document.hidden)
+      return
+    if (blinkEnabled) {
+      if (!mixer)
+        render()
+      scheduleBlink()
+    }
+    if (!mixer)
       return
     previousFrame = performance.now()
     timer = setInterval(() => {
@@ -108,7 +190,7 @@ export function createAvatarView(canvas) {
       previousFrame = now
       mixer.update(elapsed)
       draw(elapsed)
-    }, 1000 / 24)
+    }, frameInterval)
   }
 
   function releaseModel() {
@@ -120,6 +202,8 @@ export function createAvatarView(canvas) {
       VRMUtils.deepDispose(model)
       model = undefined
       mixer = undefined
+      sharedMorphs = []
+      blinkEnabled = false
       avatar = undefined
     }
   }
@@ -167,9 +251,12 @@ export function createAvatarView(canvas) {
       bounds = nextBounds
       scene.add(model)
       if (clip) {
+        sharedMorphs = prepareEmbeddedClip(vrm, clip)
         mixer = new AnimationMixer(model)
         mixer.clipAction(clip).play()
+        mixer.update(0)
       }
+      blinkEnabled = hasIdleBlink(vrm, sharedMorphs)
       render()
       updateAnimation()
     },

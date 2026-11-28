@@ -8,7 +8,7 @@ import { BrowserWindow, screen } from 'electron'
 
 import { defaultPresence } from '../../../core/src/presence/index.ts'
 import { createPresenceService } from '../../../core/src/presence/service.ts'
-import { stageExpressionChanged, stagePresenceVisibility } from '../shared/chat-ipc.ts'
+import { isPresenceAvatarBytes, stageExpressionChanged, stagePresenceAvatarChanged, stagePresenceVisibility } from '../shared/chat-ipc.ts'
 
 export function createStagePresence(options: {
   isHostFullscreen: () => boolean
@@ -19,6 +19,8 @@ export function createStagePresence(options: {
   let service: ReturnType<typeof createPresenceService> | undefined
   let asset: Uint8Array | undefined
   let settleRender: ((rendered: boolean) => void) | undefined
+  let replacement: { id: number, settle: (rendered: boolean) => void } | undefined
+  let nextReplacementId = 0
   let opening = false
   let expression: ExpressionPhase = 'idle'
   let generation = 0
@@ -29,7 +31,7 @@ export function createStagePresence(options: {
   }
 
   async function open(input: unknown) {
-    if (opening || window || !(input instanceof Uint8Array) || input.byteLength < 20 || input.byteLength > 64 * 1024 * 1024)
+    if (opening || window || !isPresenceAvatarBytes(input))
       return false
     opening = true
     const request = generation
@@ -89,6 +91,7 @@ export function createStagePresence(options: {
       overlay.once('closed', () => {
         settleRender?.(false)
         settleRender = undefined
+        replacement?.settle(false)
         controller.dispose()
         window = undefined
         service = undefined
@@ -127,8 +130,39 @@ export function createStagePresence(options: {
     return window && !window.isDestroyed() && event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame
   }
 
+  async function replace(input: unknown) {
+    const overlay = window
+    if (!overlay || overlay.isDestroyed() || overlay.webContents.isDestroyed())
+      return 'closed'
+    if (opening || replacement || !isPresenceAvatarBytes(input))
+      return 'failed'
+
+    const id = ++nextReplacementId
+    const rendered = new Promise<boolean>((settle) => { replacement = { id, settle } })
+    // Closing an unresponsive overlay also cancels its pending parse.
+    const watchdog = setTimeout(() => {
+      if (window === overlay)
+        close()
+    }, 15_000)
+    try {
+      overlay.webContents.send(stagePresenceAvatarChanged, id, input)
+      const success = await rendered
+      if (overlay.isDestroyed())
+        return 'closed'
+      return success ? 'updated' : 'failed'
+    }
+    catch {
+      return 'failed'
+    }
+    finally {
+      clearTimeout(watchdog)
+      replacement = undefined
+    }
+  }
+
   return {
     open,
+    replace,
     close,
     ownsOverlay,
     expression: () => expression,
@@ -153,9 +187,13 @@ export function createStagePresence(options: {
       asset = undefined
       return bytes
     },
-    reportRender(event: Electron.IpcMainInvokeEvent, rendered: unknown) {
-      if (ownsOverlay(event) && typeof rendered === 'boolean')
+    reportRender(event: Electron.IpcMainEvent, rendered: unknown, id: unknown) {
+      if (!ownsOverlay(event) || typeof rendered !== 'boolean')
+        return
+      if (id === undefined)
         settleRender?.(rendered)
+      else if (replacement && id === replacement.id)
+        replacement.settle(rendered)
     },
     async command(action: unknown) {
       const current = service
