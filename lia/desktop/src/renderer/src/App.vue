@@ -1,21 +1,5 @@
 <script setup lang="ts">
-/**
- * The Lia app shell (Phase 8.0A-2, over the Phase 7 launcher): a stable
- * persistent frame built on the 8.0A-1 design tokens + primitives.
- *
- *   sidebar (brand once / nav / settings footer) │ context bar
- *                                                │ content stage
- *                                                │ functional log footer
- *
- * Shell/layout ONLY: view switching, provisioning, voice readiness, Stage
- * launch and every product behavior are carried over untouched. Pages are
- * NOT redesigned in this phase; the brand appears exactly ONCE (top-left),
- * global settings live in the sidebar footer (LIA-UI-DESIGN-SYSTEM §6-7),
- * and the top area keeps ONE useful global status - the voice readiness,
- * rendered with LiaStatusChip from the SAME provisioning source of truth
- * the Voice page uses (§8 contextual priority, no technical-chip rows).
- */
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 
 import LiaStatusChip from './components/lia/LiaStatusChip.vue'
 import AiResourcesView from './views/AiResourcesView.vue'
@@ -30,7 +14,9 @@ import { pickVoiceEngineLocale } from './voice-engine-strings'
 type Page = 'config' | 'diagnostics' | 'home' | 'voice' | 'ai'
 
 const page = ref<Page>('home')
+const main = ref<HTMLElement | null>(null)
 const status = ref<any>(undefined)
+const statusError = ref(false)
 // Phase 7.9H-B2: the voice chip reads the SAME provisioning readiness
 // state the Voice page shows (7.9H source of truth - one state model).
 const readiness = ref<any>(undefined)
@@ -43,8 +29,8 @@ const logLines = reactive<string[]>([])
 
 const api = computed(() => (window as any).liaApi)
 const text = computed(() => pickVoiceEngineLocale(language.value) === 'en-US'
-  ? { home: 'Home', ai: 'AI & Resources', voice: 'Voice', diagnostics: 'Diagnostics', settings: 'Settings', voicePrefix: 'voice', log: 'Log', emptyLog: 'quiet here', statusFailed: 'Could not refresh the status.' }
-  : { home: 'Início', ai: 'IA & Recursos', voice: 'Voz', diagnostics: 'Diagnósticos', settings: 'Configuração', voicePrefix: 'voz', log: 'Log', emptyLog: 'silêncio por aqui', statusFailed: 'Não foi possível atualizar o estado.' })
+  ? { home: 'Home', ai: 'AI & Resources', voice: 'Voice', diagnostics: 'Diagnostics', config: 'Settings', nav: 'Launcher navigation', voicePrefix: 'voice', log: 'Log', emptyLog: 'quiet here', statusFailed: 'Could not refresh the status.' }
+  : { home: 'Início', ai: 'IA & Recursos', voice: 'Voz', diagnostics: 'Diagnósticos', config: 'Configuração', nav: 'Navegação do Launcher', voicePrefix: 'voz', log: 'Log', emptyLog: 'silêncio por aqui', statusFailed: 'Não foi possível atualizar o estado.' })
 let unsubscribe: (() => void) | undefined
 let configRequest = 0
 let statusRequest = 0
@@ -69,12 +55,16 @@ async function refresh() {
   const request = ++statusRequest
   try {
     const nextStatus = await api.value.homeStatus()
-    if (request === statusRequest)
+    if (request === statusRequest) {
       status.value = nextStatus
+      statusError.value = false
+    }
   }
   catch {
-    if (request === statusRequest)
+    if (request === statusRequest) {
+      statusError.value = true
       push(text.value.statusFailed)
+    }
   }
 }
 
@@ -101,16 +91,26 @@ const voiceChip = computed(() => voiceStatusChipVm(readiness.value, language.val
 /** Chip tone -> the LiaStatusChip semantic variant (the shared mapping). */
 const voiceVariant = computed(() => voiceStatusChipVariant(voiceChip.value.tone))
 
-/**
- * The persistent middle navigation. Global settings intentionally live in
- * the sidebar FOOTER gear (§7) - every destination stays reachable.
- */
-const nav = computed<{ icon: string, id: Page, label: string }[]>(() => [
-  { icon: '●', id: 'home', label: text.value.home },
-  { icon: '✦', id: 'ai', label: text.value.ai },
-  { icon: '🎙', id: 'voice', label: text.value.voice },
-  { icon: '◧', id: 'diagnostics', label: text.value.diagnostics },
-])
+const navGroups: Page[][] = [
+  ['home', 'ai', 'voice'],
+  ['config', 'diagnostics'],
+]
+
+const icons: Record<Page, string> = {
+  home: 'M5 10.5 12 5l7 5.5V20h-5v-6h-4v6H5z',
+  ai: 'M6 6h12v12H6zM9 9h6v6H9zM9 3v3m6-3v3m-6 12v3m6-3v3M3 9h3m-3 6h3m12-6h3m-3 6h3',
+  voice: 'M12 3a3 3 0 0 0-3 3v5a3 3 0 1 0 6 0V6a3 3 0 0 0-3-3ZM6 10v1a6 6 0 0 0 12 0v-1m-6 7v4m-3 0h6',
+  config: 'M10 3h4l.6 2.2 2 .9 2-.9 2 3.5-1.5 1.6v3.4l1.5 1.6-2 3.5-2-.9-2 .9L14 21h-4l-.6-2.2-2-.9-2 .9-2-3.5 1.5-1.6v-3.4L3.4 8.7l2-3.5 2 .9 2-.9zM15 12a3 3 0 1 1-6 0 3 3 0 1 1 6 0z',
+  diagnostics: 'm3 12 4-5 3 3 6-6 2 2 3-3m-5 17a4 4 0 1 1 0-8 4 4 0 0 1 0 8Zm3-1 2 2',
+}
+
+async function openFromHome(destination: 'ai' | 'diagnostics') {
+  page.value = destination
+  await nextTick()
+  main.value?.focus({ preventScroll: true })
+}
+
+watch(page, () => main.value?.scrollTo({ top: 0, left: 0 }), { flush: 'post' })
 
 const current = computed(() => {
   switch (page.value) {
@@ -144,63 +144,49 @@ onUnmounted(() => unsubscribe?.())
 
 <template>
   <div class="shell">
-    <!-- Persistent sidebar: brand ONCE (top), nav (middle), settings (footer). -->
-    <aside class="sidebar">
-      <div class="sidebar-brand">
-        <span class="brand-mark" aria-hidden="true">L</span>
-        <span class="brand-name">Lia</span>
-      </div>
-
-      <nav class="sidebar-nav">
+    <nav class="sidebar" :aria-label="text.nav">
+      <div
+        v-for="group in navGroups"
+        :key="group[0]"
+        class="sidebar-nav"
+        :class="{ 'sidebar-footer': group[0] === 'config' }"
+      >
         <button
-          v-for="item in nav"
-          :key="item.id"
+          v-for="destination in group"
+          :key="destination"
+          type="button"
           class="nav-item"
-          :class="{ active: page === item.id }"
-          :aria-label="item.label"
-          @click="page = item.id"
+          :class="{ settings: destination === 'config' }"
+          :aria-label="text[destination]"
+          :aria-current="page === destination ? 'page' : undefined"
+          :title="text[destination]"
+          @click="page = destination"
         >
-          <span class="nav-icon" aria-hidden="true">{{ item.icon }}</span>
-          <span class="nav-label">{{ item.label }}</span>
-        </button>
-      </nav>
-
-      <!-- Functional footer: global settings belong here (§7), never in the
-           top status area. No duplicated branding, no version invention. -->
-      <div class="sidebar-footer">
-        <button
-          class="nav-item settings"
-          :class="{ active: page === 'config' }"
-          :aria-label="text.settings"
-          @click="page = 'config'"
-        >
-          <span class="nav-icon" aria-hidden="true">⚙</span>
-          <span class="nav-label">{{ text.settings }}</span>
+          <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path :d="icons[destination]" />
+          </svg>
+          <span class="nav-label">{{ text[destination] }}</span>
         </button>
       </div>
-    </aside>
+    </nav>
 
     <div class="main">
-      <!-- Minimal context bar: ONE useful global status (voice readiness,
-           from the provisioning source of truth). No technical-chip rows. -->
-      <header class="contextbar">
+      <header v-if="page !== 'home'" class="contextbar">
         <LiaStatusChip :variant="voiceVariant">
           {{ text.voicePrefix }}: {{ voiceChip.label }}
         </LiaStatusChip>
       </header>
 
-      <main class="stage">
-        <!-- Home additionally consumes the shell's readiness facts (same
-             source of truth - never a second state model); other views are
-             untouched and receive nothing extra. -->
+      <main ref="main" class="stage" :class="{ 'stage-home': page === 'home' }" tabindex="-1">
         <component
           :is="current"
           :status="status"
           :api="api"
           :language="language"
-          v-bind="page === 'home' ? { language, readiness, setup } : {}"
+          v-bind="page === 'home' ? { readiness, setup, statusError } : {}"
           @refresh="refresh"
-          @open-ai="page = 'ai'"
+          @open-ai="openFromHome('ai')"
+          @open-diagnostics="openFromHome('diagnostics')"
         />
       </main>
 
@@ -222,8 +208,6 @@ onUnmounted(() => unsubscribe?.())
 </template>
 
 <style scoped>
-/* The persistent frame: a fixed sidebar column + a fluid main column.
-   Everything below consumes 8.0A-1 semantic tokens - no raw colors. */
 .shell {
   background: var(--lia-bg-app);
   color: var(--lia-text-primary);
@@ -231,80 +215,94 @@ onUnmounted(() => unsubscribe?.())
   height: 100vh;
 }
 
-/* ---- Sidebar ---------------------------------------------------------- */
 .sidebar {
-  background: var(--lia-bg-surface);
-  border-right: 1px solid var(--lia-border-subtle);
+  align-items: center;
+  background: var(--r04-canvas);
+  border-right: 1px solid var(--r04-rule, var(--lia-border-subtle));
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  padding: var(--lia-space-4) var(--lia-space-3);
-  width: 180px;
-}
-
-/* The ONE brand surface (§6): compact mark + name, top-left, never repeated. */
-.sidebar-brand {
-  align-items: center;
-  display: flex;
-  gap: var(--lia-space-3);
-  padding: var(--lia-space-1) var(--lia-space-2) var(--lia-space-4);
-}
-.brand-mark {
-  align-items: center;
-  background: linear-gradient(135deg, var(--lia-accent), var(--lia-accent-soft));
-  border-radius: var(--lia-radius-md);
-  color: var(--lia-accent-contrast);
-  display: inline-flex;
-  font-size: var(--lia-text-xl);
-  font-weight: var(--lia-font-bold);
-  height: 36px;
-  justify-content: center;
-  width: 36px;
-}
-.brand-name {
-  font-size: var(--lia-text-xl);
-  font-weight: var(--lia-font-bold);
-  letter-spacing: 0.5px;
+  font-family: var(--r04-font, var(--lia-foundation-font));
+  gap: 12px;
+  overflow-y: auto;
+  padding: 29px 0 24px;
+  scrollbar-width: none;
+  width: 88px;
 }
 
 .sidebar-nav {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: var(--lia-space-1);
+  display: grid;
+  gap: 12px;
+  justify-items: center;
 }
 
 .sidebar-footer {
-  border-top: 1px solid var(--lia-border-subtle);
-  padding-top: var(--lia-space-3);
+  margin-top: auto;
+}
+
+.sidebar-footer .nav-item {
+  width: 80px;
+  padding-inline: 1px;
 }
 
 .nav-item {
   align-items: center;
   background: transparent;
   border: none;
-  border-radius: var(--lia-radius-md);
-  color: var(--lia-text-primary);
+  border-radius: 8px;
+  color: var(--r04-muted);
   display: flex;
-  font-size: var(--lia-text-md);
-  gap: var(--lia-space-3);
-  padding: var(--lia-space-2) var(--lia-space-3);
-  text-align: left;
-  transition: background var(--lia-transition-fast) ease, border-color var(--lia-transition-fast) ease;
+  flex-direction: column;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  gap: 5px;
+  justify-content: center;
+  line-height: 1.13;
+  min-height: 56px;
+  padding: 6px 3px;
+  position: relative;
+  text-align: center;
+  width: 68px;
 }
+
 .nav-item:hover {
-  background: var(--lia-bg-surface-raised);
+  box-shadow: inset 0 0 0 1px var(--r04-outline);
 }
-.nav-item.active {
-  background: var(--lia-bg-surface-raised);
-  border: 1px solid var(--lia-border-accent);
+
+.nav-item[aria-current='page'] {
+  background: var(--r04-selection);
+  color: var(--r04-selection-text);
 }
+
+.nav-item[aria-current='page']::before {
+  background: currentColor;
+  border-radius: 2px;
+  content: '';
+  inset: 15px auto 15px 0;
+  position: absolute;
+  width: 2px;
+}
+
 .nav-item:focus-visible {
-  box-shadow: var(--lia-focus-ring);
-  outline: none;
+  outline-color: var(--r04-focus);
 }
+
 .nav-icon {
-  width: 18px;
+  flex: none;
+  height: 21px;
+  width: 21px;
+}
+
+.nav-label {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+@media (forced-colors: active) {
+  .nav-item:focus-visible {
+    outline-color: Highlight;
+  }
 }
 
 /* ---- Main column ------------------------------------------------------- */
@@ -328,9 +326,20 @@ onUnmounted(() => unsubscribe?.())
 /* Content stage: consistent token spacing, independent scroll. */
 .stage {
   flex: 1;
+  min-height: 0;
   min-width: 0;
   overflow-y: auto;
   padding: var(--lia-space-6);
+}
+
+.stage:focus-visible {
+  outline-offset: -2px;
+}
+
+.stage-home {
+  background: var(--r04-lowest);
+  color-scheme: dark;
+  padding: 0;
 }
 
 /* Functional footer: the bounded never-secret event log strip. */
@@ -357,28 +366,53 @@ onUnmounted(() => unsubscribe?.())
   font-style: italic;
 }
 
-/* ---- Window safety ------------------------------------------------------
-   Narrower launcher widths collapse the sidebar to an icon rail (labels
-   stay reachable through aria-labels). This is layout tolerance only -
-   NOT a mobile navigation system. */
-@media (max-width: 640px) {
+@media (max-width: 1040px) {
   .sidebar {
-    padding: var(--lia-space-3) var(--lia-space-2);
+    width: 76px;
+  }
+
+  .nav-item {
+    font-size: 10px;
+    letter-spacing: -0.025em;
+    min-height: 54px;
+    padding-inline: 2px;
+    width: 66px;
+  }
+
+  .sidebar-footer .nav-item {
+    width: 70px;
+  }
+}
+
+@media (max-width: 720px), (max-height: 620px) {
+  .sidebar {
+    padding-block: 18px;
+  }
+}
+
+@media (max-height: 400px) {
+  .sidebar {
+    padding-block: 12px;
+  }
+
+  .sidebar,
+  .sidebar-nav {
+    gap: 6px;
+  }
+}
+
+@media (max-width: 480px) {
+  .sidebar {
+    width: 64px;
+  }
+
+  .nav-item {
+    font-size: 9px;
     width: 56px;
   }
-  .brand-name,
-  .nav-label {
-    display: none;
-  }
-  .sidebar-brand {
-    justify-content: center;
-    padding-left: 0;
-    padding-right: 0;
-  }
-  .nav-item {
-    justify-content: center;
-    padding-left: var(--lia-space-2);
-    padding-right: var(--lia-space-2);
+
+  .sidebar-footer .nav-item {
+    width: 60px;
   }
 }
 </style>
