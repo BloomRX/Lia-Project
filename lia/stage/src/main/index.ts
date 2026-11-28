@@ -22,7 +22,7 @@ import { createTransportRepository } from '../../../core/src/transports/reposito
 import { stageChatCancel, stageChatSend, stageChatSpeak, stageMarkdown, stageMemoryGet, stageMemoryMutate, stageMicrophoneArm, stagePresenceClose, stagePresenceCommand, stagePresenceOpen, stagePresenceRead, stagePresenceRendered, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
 import { stageConversationChange, stageHistoryChange, stageHistoryGet, stageHistoryImport, stageHistoryRemoveMessage, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
 import { stagePersonaChange, stagePersonaGet } from '../shared/chat-ipc.ts'
-import { stagePresenceReadPackagedAvatar } from '../shared/chat-ipc.ts'
+import { stagePresenceReadPackagedAvatar, stagePresenceReplace } from '../shared/chat-ipc.ts'
 import { stageExpressionGet, stageExpressionSet, stageHubCatalogGet, stageHubSkillAudit, stageHubSkillCancel, stageHubSkillRun, stageHubSkillStart, stageHubSkillStatus, stageImageAudit, stageImageCopy, stageImageCopyCancel, stageImageInspect, stageMemoryExport } from '../shared/chat-ipc.ts'
 import { stageChatStopSpeech, stageVoiceAutoPlay } from '../shared/chat-ipc.ts'
 import { isExpressionPhase } from '../shared/expression-phase.ts'
@@ -357,6 +357,7 @@ async function main(): Promise<void> {
     }
   })
   ipcMain.handle(stagePresenceOpen, (event, bytes: unknown) => Boolean(authorized(event)) && presence.open(bytes))
+  ipcMain.handle(stagePresenceReplace, (event, bytes: unknown) => authorized(event) ? presence.replace(bytes) : 'failed')
   ipcMain.handle(stagePresenceClose, (event) => {
     if (authorized(event))
       presence.close()

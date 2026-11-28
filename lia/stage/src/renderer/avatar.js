@@ -22,14 +22,16 @@ let savedAvatar = false
 let checkedStorage = false
 
 function updateActions() {
+  const busy = presenceBusy || picker.disabled
   actions.hidden = !selectedAvatar
-  show.disabled = presenceBusy || presenceOpen
-  hide.disabled = presenceBusy || !presenceOpen
-  save.disabled = presenceBusy || picker.disabled
-  forget.disabled = presenceBusy || picker.disabled || !savedAvatar
-  monitor.disabled = presenceBusy || !presenceOpen || monitor.options.length === 0
+  pickerButton.disabled = busy
+  show.disabled = busy || presenceOpen
+  hide.disabled = busy || !presenceOpen
+  save.disabled = busy
+  forget.disabled = busy || !savedAvatar
+  monitor.disabled = busy || !presenceOpen || monitor.options.length === 0
   for (const command of commands)
-    command.disabled = presenceBusy || !presenceOpen
+    command.disabled = busy || !presenceOpen
 }
 
 async function preview(bytes) {
@@ -38,7 +40,20 @@ async function preview(bytes) {
   await view.load(bytes)
   selectedAvatar = bytes
   canvas.hidden = false
-  status.textContent = t('Avatar carregado.')
+}
+
+async function syncPresence() {
+  if (!presenceOpen)
+    return true
+  try {
+    const result = await window.liaStagePresence.replace(new Uint8Array(selectedAvatar))
+    if (result === 'closed')
+      presenceOpen = false
+    return result === 'updated'
+  }
+  catch {
+    return false
+  }
 }
 
 async function changeSavedAvatar(operation, message) {
@@ -155,7 +170,7 @@ function releaseClosedPreview() {
 pickerButton.addEventListener('click', () => picker.click())
 picker.addEventListener('change', async () => {
   const file = picker.files[0]
-  if (!file)
+  if (!file || presenceBusy || picker.disabled)
     return
   if (file.size > maxAvatarBytes) {
     status.textContent = t('Escolha um arquivo VRM de até 64 MB.')
@@ -163,7 +178,7 @@ picker.addEventListener('change', async () => {
     return
   }
   picker.disabled = true
-  pickerButton.disabled = true
+  updateActions()
   status.textContent = t('Carregando avatar…')
   try {
     const bytes = await file.arrayBuffer()
@@ -180,6 +195,8 @@ picker.addEventListener('change', async () => {
     else {
       await preview(bytes)
     }
+    const synced = await syncPresence()
+    status.textContent = t(synced ? 'Avatar carregado.' : 'Não foi possível alterar a presença no desktop.')
   }
   catch {
     status.textContent = t('Não foi possível abrir este avatar. Escolha um arquivo VRM com recursos incorporados.')
@@ -187,7 +204,6 @@ picker.addEventListener('change', async () => {
   finally {
     picker.value = ''
     picker.disabled = false
-    pickerButton.disabled = false
     updateActions()
     releaseClosedPreview()
   }
@@ -196,22 +212,17 @@ picker.addEventListener('change', async () => {
 details.addEventListener('toggle', () => {
   releaseClosedPreview()
   if (details.open && selectedAvatar && !view && !presenceBusy && !picker.disabled) {
-    void changeSavedAvatar(() => preview(selectedAvatar), '')
+    void changeSavedAvatar(() => preview(selectedAvatar), 'Avatar carregado.')
     return
   }
   if (details.open && !checkedStorage) {
     checkedStorage = true
-    pickerButton.disabled = true
     void changeSavedAvatar(async () => {
-      try {
-        const bytes = await readSavedAvatar()
-        if (bytes) {
-          savedAvatar = true
-          await preview(bytes)
-        }
-      }
-      finally {
-        pickerButton.disabled = false
+      const bytes = await readSavedAvatar()
+      if (bytes) {
+        savedAvatar = true
+        await preview(bytes)
+        status.textContent = t('Avatar carregado.')
       }
     }, '')
   }

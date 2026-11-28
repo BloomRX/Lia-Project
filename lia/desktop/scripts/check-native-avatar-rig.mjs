@@ -154,6 +154,7 @@ async function run() {
   }
 
   async function preview(chat, source) {
+    await chat.waitForFunction(() => !document.querySelector('#avatar-picker').disabled)
     await chat.getByLabel('Abrir avatar VRM').setInputFiles(source)
     await chat.getByText('Avatar carregado.', { exact: true }).waitFor()
   }
@@ -201,6 +202,23 @@ async function run() {
     await chat.getByText('Avatar aberto no desktop.', { exact: true }).waitFor()
     report.presence = await sample(overlay)
     assertArms(report.presence)
+    const overlayWindow = await app.browserWindow(overlay)
+    const overlayId = await overlayWindow.evaluate(window => window.id)
+    await overlayWindow.dispose()
+    await preview(chat, fixture)
+    await overlay.waitForFunction(() => Math.abs(window.fixtureRig.skin.leftUpperArm[0] - 1) < 0.001)
+    const replaced = await sample(overlay)
+    assertNear(replaced.skin.leftUpperArm[1], 0, 'Braço sem trilha após troca na mesma janela')
+    await preview(chat, animated)
+    await overlay.waitForFunction(expected => Math.abs(window.fixtureRig.skin.leftUpperArm[0] - expected) < 0.001, Math.cos(arms.leftUpperArm))
+    const restored = await sample(overlay)
+    assertArms(restored)
+    assertNear(restored.morph[1], blinkWeight, 'Piscada do clipe após troca')
+    const liveWindow = await app.browserWindow(overlay)
+    assert.equal(await liveWindow.evaluate(window => window.id), overlayId)
+    await liveWindow.dispose()
+    assert.equal(app.windows().length, 2)
+    report.avatarReplacement = { windowId: overlayId, replaced, restored }
     for (const [phase, morphIndex, weight] of [['responded', 0, 0.55], ['speaking', 2, 0.18]]) {
       await chat.evaluate(next => window.liaStagePresence.publishExpression(next), phase)
       await overlay.waitForFunction(([i, value]) => Math.abs(window.fixtureRig.morph[i] - value) < 0.001, [morphIndex, weight])
@@ -229,6 +247,7 @@ async function run() {
       await fullscreen(true)
       await overlay.waitForFunction(() => window.fixtureRig.visible === false, undefined, { polling: 50 })
       const paused = await overlay.evaluate(() => window.fixtureRig.renders)
+      await preview(chat, fixture)
       await delay(300)
       assert.equal(await overlay.evaluate(() => window.fixtureRig.renders), paused)
       report.fullscreen = { pausedFrames: paused }
@@ -238,8 +257,11 @@ async function run() {
     }
     await overlay.waitForFunction(count => window.fixtureRig.renders > count, report.fullscreen.pausedFrames)
     const resumed = await sample(overlay)
-    assertArms(resumed)
+    assertNear(resumed.skin.leftUpperArm[0], 1, 'Avatar trocado durante a ocultação')
+    assertNear(resumed.skin.leftUpperArm[1], 0, 'Braço sem trilha ao retomar')
     report.fullscreen.resumedFrames = resumed.renders
+    await preview(chat, animated)
+    await overlay.waitForFunction(expected => Math.abs(window.fixtureRig.skin.leftUpperArm[0] - expected) < 0.001, Math.cos(arms.leftUpperArm))
 
     await chat.getByRole('button', { name: 'Lembrar este avatar', exact: true }).click()
     await chat.getByText('Avatar salvo neste perfil.', { exact: true }).waitFor()

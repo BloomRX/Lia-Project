@@ -25,6 +25,8 @@ export const stageMarkdown = 'lia:stage:memory:markdown'
 export const stageMemoryGet = 'lia:stage:memory:get'
 export const stageMemoryMutate = 'lia:stage:memory:mutate'
 export const stagePresenceOpen = 'lia:stage:presence:open'
+export const stagePresenceReplace = 'lia:stage:presence:replace'
+export const stagePresenceAvatarChanged = 'lia:stage:presence:avatar-changed'
 export const stagePresenceReadPackagedAvatar = 'lia:stage:presence:read-packaged-avatar'
 export const stagePresenceClose = 'lia:stage:presence:close'
 export const stagePresenceRead = 'lia:stage:presence:read'
@@ -33,6 +35,16 @@ export const stagePresenceRendered = 'lia:stage:presence:rendered'
 export const stageLanguageGet = 'lia:stage:language:get'
 export const stagePresenceCommand = 'lia:stage:presence:command'
 export const stagePresenceDisplays = 'lia:stage:presence:displays'
+
+export function isPresenceAvatarBytes(input: unknown): input is Uint8Array {
+  return input instanceof Uint8Array
+    && input.byteLength >= 20
+    && input.byteLength <= 64 * 1024 * 1024
+    && input.buffer instanceof ArrayBuffer
+    && input.byteOffset === 0
+    && input.buffer.byteLength === input.byteLength
+}
+
 export const stageHubSkillRun = 'lia:stage:hub:skill-run'
 export const stageHubSkillStart = 'lia:stage:hub:skill-start'
 export const stageHubSkillStatus = 'lia:stage:hub:skill-status'

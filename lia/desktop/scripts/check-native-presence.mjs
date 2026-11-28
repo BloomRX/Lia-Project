@@ -139,6 +139,7 @@ async function run() {
     assert.equal(rejectedOverlay, false)
     assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length), 1)
     await chat.getByText('Avatar', { exact: true }).click()
+    await chat.waitForFunction(() => !document.querySelector('#avatar-picker').disabled)
     const picker = chat.getByLabel('Abrir avatar VRM')
     await picker.setInputFiles(invalid)
     await chat.getByText('Não foi possível abrir este avatar.', { exact: false }).waitFor()

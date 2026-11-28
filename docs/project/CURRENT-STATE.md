@@ -2,6 +2,8 @@
 
 ## 0. Estado agora
 
+- **Troca de avatar com a Presença aberta.** O Stage atualiza o modelo da janela existente ao importar outro VRM. No Electron 43.4.1 no Windows, duas amostras VRM 0 alternaram nas duas direções e a cópia escolhida foi restaurada após reiniciar o perfil isolado. O Robô Pêndulo confirmou troca com a janela visível e durante a pausa em tela cheia, retomada e expressões. Veja [relatório e comandos](../reports/LIA-DESKTOP-FORGE-HUMANOID-WINDOWS.md#troca-com-a-presença-aberta).
+
 - **Animação humanoide no Stage.** Clipes glTF embutidos no VRM preservam as trilhas das juntas e combinam morphs do clipe com piscada, fala e reação. O Electron 43.4.1 no Windows conferiu as duas rotações de braço no preview e na Presença, pausa, retomada e restauração do avatar após reinício. Sete gates integrados passaram. O ensaio usou o Robô Pêndulo MIT e artefatos de desenvolvimento. VRMA avulso, retargeting e instalador com esta correção seguem sem validação. Veja [evidência e instruções para Forge](../reports/LIA-DESKTOP-FORGE-HUMANOID-WINDOWS.md).
 
 - **Memory V2.1-B.** O painel de Memória consulta Markdown local de uma pasta escolhida por projeto, em modo somente leitura. O conteúdo fica fora do chat. Veja [limites e gates](LIA-MEMORY-V2.1-B.md).

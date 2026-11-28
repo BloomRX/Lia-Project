@@ -8,7 +8,7 @@ O Stage impede essa cópia quando o clipe tem trilha de posição ou rotação e
 
 1. Exporte um VRM autocontido com extensão de avatar, texturas incorporadas e o clipe glTF no próprio arquivo. As trilhas de rotação e posição apontam para os nós do rig desse arquivo. Em um rig diferente é preciso reaplicar a animação antes da exportação.
 2. No Forge, use **Modelo 3D portátil**, revise o conteúdo e escolha **Lia Desktop · avatar VRM**. Confira o SHA-256 do `.vrm` indicado por `files` no manifesto do pacote.
-3. No Stage, abra **Avatar → Abrir avatar VRM** e importe o `.vrm` conferido. Use **Mostrar no desktop** para verificar a mesma animação na presença. **Lembrar este avatar** guarda uma cópia no perfil local. O [exemplo original sob MIT](https://github.com/BloomRX/Lia-Forge/tree/5b460111fe3584ef0242f3e647ba5291234f72b6/examples/production) fornece o modelo e o manifesto.
+3. No Stage, abra **Avatar → Abrir avatar VRM** e importe o `.vrm` conferido. Use **Mostrar no desktop** para verificar a mesma animação na Presença. Se a janela já estiver aberta, importar outro VRM atualiza as duas superfícies. **Lembrar este avatar** guarda uma cópia no perfil local. O [exemplo original sob MIT](https://github.com/BloomRX/Lia-Forge/tree/5b460111fe3584ef0242f3e647ba5291234f72b6/examples/production) fornece o modelo e o manifesto.
 
 A importação avulsa de VRMA, `motion.gltf` e pacotes Forge V1 exige outro fluxo. Retargeting entre rigs, seleção de clipe e compatibilidade com o avatar oficial ficam fora do ensaio. O gate usa o Robô Pêndulo MIT e cria a variante animada somente na pasta de evidências.
 
@@ -34,3 +34,13 @@ O gate abre o Stage próprio em Electron 43.4.1 e Chromium 150.0.7871.224 no Win
 A execução local retornou código 0 no build do Stage e em todos os sete gates Electron. O script de suítes retornou código 0 com 163 testes Core, 430 do Runtime, 60 do Stage, 350 do Launcher com 2 skips e 5 do empacotador. Também passaram typecheck, lint e pré-requisitos do empacotamento privado. O gate do avatar usa os artefatos de desenvolvimento. A instalação do desktop com a correção segue fora deste ensaio.
 
 A fixture em `lia/stage/test/fixtures/robo-pendulo.vrm` corresponde ao SHA-256 `3ba9d71609c70a28ee9e67727b23421f284ac0747cead73a85ea64e1e45eb0f7`. Sua [licença MIT](../../lia/stage/test/fixtures/robo-pendulo.LICENSE) acompanha o arquivo.
+
+## Troca com a Presença aberta
+
+Na base `cce10e41`, trocar o VRM mudava a Prévia e a Presença continuava exibindo o avatar anterior até ser aberta novamente. O Main agora encaminha cada troca validada para a janela que já existe e aguarda a confirmação dessa janela. A confirmação de carregamento vem depois da troca, inclusive quando a renderização está pausada. A janela mantém a posição e o estado de visibilidade. Se o renderer deixa de responder, o Main fecha a janela e libera os controles para uma nova abertura explícita.
+
+O gate do Robô Pêndulo executa uma troca com a Presença visível e outra em tela cheia, com o desenho pausado. No Electron 43.4.1 no Windows, a janela reteve o mesmo identificador, o cosseno do braço esquerdo mudou entre `1` e `0,5` conforme o modelo e a piscada voltou após restaurar o clipe. Durante a ocultação, o contador de quadros ficou em `20` e aumentou ao retomar com o avatar trocado. Os três encerramentos registraram código 0 e o renderer ficou sem exceções.
+
+O ensaio separado com `AvatarSample_A.vrm` e `AvatarSample_B.vrm` passou com arquivos locais e perfil isolado. A→B e B→A renderizaram na Prévia e na mesma janela da Presença. Um VRM inválido foi recusado e B permaneceu nas duas superfícies. A ação **Lembrar este avatar** salvou B. Uma troca posterior para A sem salvar preservou a cópia de B, restaurada na Prévia após reiniciar e na Presença ao abri-la pelo botão. Os dois encerramentos retornaram código 0 e o renderer ficou sem exceções. As capturas e os modelos de amostra ficaram na máquina de teste.
+
+`node --experimental-strip-types lia/desktop/scripts/check-native-presence.mjs` passou no mesmo ambiente, incluindo colocação em um segundo monitor conectado, pausa em tela cheia e simulação de recuperação da área de trabalho. A suíte do Stage passou com 61 testes, incluindo a validação do tamanho do buffer copiado entre os processos. Build, typecheck e lint passaram.

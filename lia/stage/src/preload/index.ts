@@ -8,7 +8,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { stageChatCancel, stageChatSend, stageChatSpeak, stageMarkdown, stageMemoryGet, stageMemoryMutate, stageMicrophoneArm, stagePresenceClose, stagePresenceCommand, stagePresenceOpen, stagePresenceRead, stagePresenceRendered, stageTranscribe, stageTranscriptionCancel } from '../shared/chat-ipc.ts'
 import { stageConversationChange, stageHistoryChange, stageHistoryGet, stageHistoryImport, stageHistoryRemoveMessage, stageLanguageGet, stagePresenceDisplays } from '../shared/chat-ipc.ts'
 import { stagePersonaChange, stagePersonaGet } from '../shared/chat-ipc.ts'
-import { stagePresenceReadPackagedAvatar, stagePresenceVisibility } from '../shared/chat-ipc.ts'
+import { isPresenceAvatarBytes, stagePresenceAvatarChanged, stagePresenceReadPackagedAvatar, stagePresenceReplace, stagePresenceVisibility } from '../shared/chat-ipc.ts'
 import { stageExpressionChanged, stageExpressionGet, stageExpressionSet, stageHubCatalogGet, stageHubSkillAudit, stageHubSkillCancel, stageHubSkillRun, stageHubSkillStart, stageHubSkillStatus, stageImageAudit, stageImageCopy, stageImageCopyCancel, stageImageInspect, stageMemoryExport } from '../shared/chat-ipc.ts'
 import { stageChatStopSpeech, stageVoiceAutoPlay } from '../shared/chat-ipc.ts'
 
@@ -28,7 +28,8 @@ contextBridge.exposeInMainWorld('liaStageHub', {
 })
 
 contextBridge.exposeInMainWorld('liaStagePresence', {
-  open: (bytes: Uint8Array) => ipcRenderer.invoke(stagePresenceOpen, bytes),
+  open: (bytes: Uint8Array) => isPresenceAvatarBytes(bytes) ? ipcRenderer.invoke(stagePresenceOpen, bytes) : Promise.resolve(false),
+  replace: (bytes: Uint8Array) => isPresenceAvatarBytes(bytes) ? ipcRenderer.invoke(stagePresenceReplace, bytes) : Promise.resolve('failed'),
   readPackagedAvatar: (bytes: Uint8Array) => ipcRenderer.invoke(stagePresenceReadPackagedAvatar, bytes),
   close: () => ipcRenderer.invoke(stagePresenceClose),
   command: (action: string | { monitor: number | null | 'all' }) => ipcRenderer.invoke(stagePresenceCommand, action),
@@ -52,7 +53,12 @@ contextBridge.exposeInMainWorld('liaStagePresence', {
     ipcRenderer.on(stagePresenceVisibility, receive)
     return () => ipcRenderer.removeListener(stagePresenceVisibility, receive)
   },
-  reportRender: (rendered: boolean) => ipcRenderer.send(stagePresenceRendered, rendered),
+  onAvatarChanged: (listener: (id: number, bytes: Uint8Array) => void) => {
+    const receive = (_event: unknown, id: number, bytes: Uint8Array) => listener(id, bytes)
+    ipcRenderer.on(stagePresenceAvatarChanged, receive)
+    return () => ipcRenderer.removeListener(stagePresenceAvatarChanged, receive)
+  },
+  reportRender: (rendered: boolean, id?: number) => ipcRenderer.send(stagePresenceRendered, rendered, id),
 })
 
 contextBridge.exposeInMainWorld('liaStageImage', {
