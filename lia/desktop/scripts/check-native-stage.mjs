@@ -272,9 +272,11 @@ async function run() {
     if (process.argv.includes('--verify-foundation')) {
       phase = 'launcher-design-foundation'
       const action = page.getByRole('button', { name: 'Conversar com Lia', exact: true })
-      await action.waitFor()
-      const colors = await action.evaluate((button) => {
+      await action.and(page.locator('button:enabled')).waitFor()
+      const colors = await action.evaluate(async (button) => {
         const app = getComputedStyle(document.querySelector('#app'))
+        // Read the enabled palette after the transition out of checking readiness.
+        await Promise.allSettled(button.getAnimations().map(animation => animation.finished))
         const styles = getComputedStyle(button)
         return { background: app.backgroundColor, text: app.color, action: styles.backgroundColor, onAction: styles.color }
       })
