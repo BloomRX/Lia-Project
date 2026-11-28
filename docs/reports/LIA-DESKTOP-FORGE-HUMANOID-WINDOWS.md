@@ -44,3 +44,21 @@ O gate do Robô Pêndulo executa uma troca com a Presença visível e outra em t
 O ensaio separado com `AvatarSample_A.vrm` e `AvatarSample_B.vrm` passou com arquivos locais e perfil isolado. A→B e B→A renderizaram na Prévia e na mesma janela da Presença. Um VRM inválido foi recusado e B permaneceu nas duas superfícies. A ação **Lembrar este avatar** salvou B. Uma troca posterior para A sem salvar preservou a cópia de B, restaurada na Prévia após reiniciar e na Presença ao abri-la pelo botão. Os dois encerramentos retornaram código 0 e o renderer ficou sem exceções. As capturas e os modelos de amostra ficaram na máquina de teste.
 
 `node --experimental-strip-types lia/desktop/scripts/check-native-presence.mjs` passou no mesmo ambiente, incluindo colocação em um segundo monitor conectado, pausa em tela cheia e simulação de recuperação da área de trabalho. A suíte do Stage passou com 61 testes, incluindo a validação do tamanho do buffer copiado entre os processos. Build, typecheck e lint passaram.
+
+## Piscada automática do preset VRM
+
+O Stage aplica pulsos curtos ao preset `blink` quando ele tem um vínculo de morph válido. A espera entre piscadas é de quatro segundos. Quando o clipe selecionado anima os pesos em uma primitiva vinculada à piscada, o Stage conserva a trilha do clipe. As expressões do VRM continuam passando pelo gerenciador do modelo.
+
+Em um avatar estático, o Stage desenha os quadros do pulso e volta a repousar. Ocultar a Presença cancela o pulso. Ao retomar, o modelo volta à pose de repouso e começa uma nova espera. Uma troca de avatar libera os temporizadores do anterior.
+
+O gate do Robô Pêndulo passou no Electron 43.4.1 no Windows. Ele gera uma variante sem clipe que comprime os olhos, outra que combina braços animados com o preset e um controle com a trilha de pesos autoral. Execute o gate completo ou isole a regressão nova com `node lia/desktop/scripts/check-native-avatar-rig.mjs --preset-blink-only`.
+
+| Verificação | Medição no Electron Windows |
+| --- | --- |
+| Prévia e Presença sem clipe | Peso `0 → 1 → 0` nos dados enviados ao WebGL. O pico registrado no framebuffer corresponde ao fechamento sintético dos olhos. |
+| Clipe de braço sem trilha de pesos | Matrizes do braço preservadas. No pico da piscada, o peso da fala simulada permaneceu em `0,18`. |
+| Clipe com trilha de pesos | O peso autoral permaneceu em `0,35` durante os 4,65 s observados. |
+| Pausa, retomada e troca | Nenhum quadro novo durante 4,65 s com a Presença oculta. A piscada voltou ao exibir. Após trocar para uma variante estática sem `blink`, o contador ficou estável por 4,65 s. |
+| Regressões | Amostras A e B mantiveram troca e restauração. O pacote do Forge com GLB do Blender preservou o VRM e sua animação. O gate separado de chat, memória e Kokoro local silenciado passou. |
+
+A verificação do novo preset cobriu o Robô Pêndulo MIT. A revisão artística do avatar oficial permanece independente.

@@ -16,8 +16,10 @@ const arms = { leftUpperArm: -Math.PI / 3, rightUpperArm: Math.PI / 6 }
 const alternateRightArm = Math.PI / 3
 const blinkWeight = 0.35
 const overlayBlinkBind = 0.5
+const blinkSilenceMs = 4_650
+const idleObservationMs = 450
 
-function createArmClip(bytes) {
+function createArmClip(bytes, authoredBlink = true) {
   const jsonEnd = 20 + bytes.readUInt32LE(12)
   const gltf = JSON.parse(bytes.subarray(20, jsonEnd))
   const buffers = [bytes.subarray(jsonEnd + 8)]
@@ -54,10 +56,58 @@ function createArmClip(bytes) {
   expressions.preset.blink = { morphTargetBinds: [{ node, index: 1, weight: 1 }] }
   expressions.preset.happy.morphTargetBinds.push({ node, index: 1, weight: overlayBlinkBind })
   expressions.preset.aa = { morphTargetBinds: [{ node, index: 2, weight: 1 }] }
-  const weights = [0, blinkWeight, 0]
-  addTrack(node, 'weights', appendAccessor([...weights, ...weights, ...weights], 'SCALAR', 1))
+  if (authoredBlink) {
+    const weights = [0, blinkWeight, 0]
+    addTrack(node, 'weights', appendAccessor([...weights, ...weights, ...weights], 'SCALAR', 1))
+  }
 
   const binary = Buffer.concat(buffers)
+  const textureSize = Math.ceil(Math.sqrt(gltf.skins[0].joints.length * 4) / 4) * 4
+  return { bytes: packAvatar(bytes, jsonEnd, gltf, binary), jointIndices, textureSize }
+}
+
+function writeEyeClosure(gltf, binary, { node, index }) {
+  const [primitive] = gltf.meshes[gltf.nodes[node].mesh].primitives
+  const positions = gltf.accessors[primitive.attributes.POSITION]
+  const colors = gltf.accessors[primitive.attributes.COLOR_0]
+  const delta = gltf.accessors[primitive.targets[index].POSITION]
+  const positionOffset = gltf.bufferViews[positions.bufferView].byteOffset
+  const colorOffset = gltf.bufferViews[colors.bufferView].byteOffset
+  const deltaOffset = gltf.bufferViews[delta.bufferView].byteOffset
+  const eyes = []
+  for (let vertex = 0; vertex < positions.count; vertex++) {
+    const red = binary.readFloatLE(colorOffset + vertex * 16)
+    const y = binary.readFloatLE(positionOffset + vertex * 12 + 4)
+    // The two yellow eye blocks sit above the robot's yellow mouth.
+    if (red === 1 && y > 1.57)
+      eyes.push({ vertex, y })
+  }
+  assert.equal(eyes.length, 48)
+  const heights = eyes.map(({ y }) => y)
+  const center = (Math.min(...heights) + Math.max(...heights)) / 2
+  const offsets = eyes.map(({ y }) => Math.fround((center - y) * 0.94))
+  binary.fill(0, deltaOffset, deltaOffset + delta.count * 12)
+  for (const [index, { vertex }] of eyes.entries())
+    binary.writeFloatLE(offsets[index], deltaOffset + vertex * 12 + 4)
+  delta.min = [0, Math.min(...offsets), 0]
+  delta.max = [0, Math.max(...offsets), 0]
+}
+
+function createStaticAvatar(bytes, withBlink) {
+  const jsonEnd = 20 + bytes.readUInt32LE(12)
+  const gltf = JSON.parse(bytes.subarray(20, jsonEnd))
+  const binary = Buffer.from(bytes.subarray(jsonEnd + 8))
+  if (withBlink) {
+    const { preset } = gltf.extensions.VRMC_vrm.expressions
+    const { morphTargetBinds } = preset.happy
+    gltf.extensions.VRMC_vrm.expressions.preset = { blink: { morphTargetBinds } }
+    writeEyeClosure(gltf, binary, morphTargetBinds[0])
+  }
+  delete gltf.animations
+  return packAvatar(bytes, jsonEnd, gltf, binary)
+}
+
+function packAvatar(bytes, jsonEnd, gltf, binary) {
   gltf.buffers[0].byteLength = binary.length
   const json = Buffer.from(JSON.stringify(gltf))
   const aligned = Buffer.concat([json, Buffer.alloc((4 - json.length % 4) % 4, 0x20)])
@@ -66,14 +116,13 @@ function createArmClip(bytes) {
   header.writeUInt32LE(header.length + aligned.length + binaryHeader.length + binary.length, 8)
   header.writeUInt32LE(aligned.length, 12)
   binaryHeader.writeUInt32LE(binary.length, 0)
-  const textureSize = Math.ceil(Math.sqrt(gltf.skins[0].joints.length * 4) / 4) * 4
-  return { bytes: Buffer.concat([header, aligned, binaryHeader, binary]), jointIndices, textureSize }
+  return Buffer.concat([header, aligned, binaryHeader, binary])
 }
 
 // Observe data sent to WebGL without replacing app time, clips or model state.
-function observeSkin({ jointIndices, textureSize }) {
+function observeSkin({ jointIndices, textureSize, traceMorph, capturePeak }) {
   const gl = WebGL2RenderingContext.prototype
-  const measure = window.fixtureRig = { skin: {}, morph: [], renders: 0 }
+  const measure = window.fixtureRig = { skin: {}, morph: [], renders: 0, morphChanges: [] }
   const morphLocations = new WeakSet()
   const getUniformLocation = gl.getUniformLocation
   gl.getUniformLocation = function (program, name) {
@@ -84,8 +133,15 @@ function observeSkin({ jointIndices, textureSize }) {
   }
   const uniform1fv = gl.uniform1fv
   gl.uniform1fv = function (location, data, ...range) {
-    if (morphLocations.has(location))
+    if (morphLocations.has(location)) {
       measure.morph = Array.from(data)
+      const weight = measure.morph[traceMorph]
+      if (Number.isFinite(weight) && measure.morphChanges.at(-1)?.weight !== weight) {
+        measure.morphChanges.push({ weight, mouthWeight: measure.morph[2], frame: measure.renders, ms: performance.now() })
+        if (measure.morphChanges.length > 128)
+          measure.morphChanges.shift()
+      }
+    }
     return uniform1fv.call(this, location, data, ...range)
   }
   const texSubImage2D = gl.texSubImage2D
@@ -102,6 +158,24 @@ function observeSkin({ jointIndices, textureSize }) {
   gl.clear = function (mask) {
     measure.renders++
     return clear.call(this, mask)
+  }
+  if (capturePeak) {
+    const drawElements = gl.drawElements
+    gl.drawElements = function (...args) {
+      const result = drawElements.apply(this, args)
+      const weight = measure.morph[traceMorph]
+      if (this.canvas.id === 'avatar-canvas' && weight >= 0.8 && !measure.peakCapture) {
+        try {
+          const dataUrl = this.canvas.toDataURL()
+          if (dataUrl.startsWith('data:image/png;base64,'))
+            measure.peakCapture = { png: dataUrl.slice('data:image/png;base64,'.length), weight, frame: measure.renders }
+        }
+        catch (error) {
+          measure.peakCapture = { error: error.message }
+        }
+      }
+      return result
+    }
   }
 }
 
@@ -129,11 +203,19 @@ async function run() {
   const { bytes, ...measurement } = createArmClip(original)
   const animated = join(root, 'robo-pendulo-os-bracos.vrm')
   await writeFile(animated, bytes)
+  const blinkAvatar = join(root, 'robo-pendulo-preset-blink.vrm')
+  const blinkBytes = createStaticAvatar(original, true)
+  await writeFile(blinkAvatar, blinkBytes)
+  const staticControl = join(root, 'robo-pendulo-estatico-sem-blink.vrm')
+  await writeFile(staticControl, createStaticAvatar(original, false))
+  const armClipWithBlink = join(root, 'robo-pendulo-bracos-preset-blink.vrm')
+  const { bytes: armClipWithBlinkBytes } = createArmClip(original, false)
+  await writeFile(armClipWithBlink, armClipWithBlinkBytes)
   await writeFile(join(root, 'lia-product.json'), JSON.stringify({ preferences: { language: 'pt-BR' } }))
   const report = { fixtureSha256, expectedAnglesRadians: { ...arms, alternateRightArm }, blinkWeight, rendererErrors: [], exits: [] }
   let app
 
-  async function open() {
+  async function open(traceMorph = 1, capturePeak = false) {
     app = await _electron.launch({
       executablePath: join(stage, 'node_modules', 'electron', 'dist', 'electron.exe'),
       args: [join(stage, 'out', 'main', 'index.js')],
@@ -142,8 +224,9 @@ async function run() {
     const chat = await app.firstWindow()
     chat.setDefaultTimeout(10_000)
     chat.on('pageerror', error => report.rendererErrors.push(error.message))
-    await chat.evaluate(observeSkin, measurement)
-    await app.context().addInitScript(observeSkin, measurement)
+    const options = { ...measurement, traceMorph, capturePeak }
+    await chat.evaluate(observeSkin, options)
+    await app.context().addInitScript(observeSkin, options)
     await chat.getByText('Avatar', { exact: true }).click()
     return chat
   }
@@ -159,6 +242,28 @@ async function run() {
     await chat.getByText('Avatar carregado.', { exact: true }).waitFor()
   }
 
+  async function showPresence(chat) {
+    const [overlay] = await Promise.all([
+      app.waitForEvent('window', { timeout: 10_000 }), chat.getByRole('button', { name: 'Mostrar no desktop', exact: true }).click(),
+    ])
+    overlay.setDefaultTimeout(10_000)
+    overlay.on('pageerror', error => report.rendererErrors.push(error.message))
+    await chat.getByText('Avatar aberto no desktop.', { exact: true }).waitFor()
+    return overlay
+  }
+
+  const fullscreen = value => app.evaluate(({ BrowserWindow }, next) => {
+    BrowserWindow.getAllWindows().find(window => !window.webContents.getURL().endsWith('/presence.html')).setFullScreen(next)
+  }, value)
+
+  async function observeVisibility(overlay) {
+    await overlay.evaluate(() => {
+      window.liaStagePresence.onVisibility((visible) => {
+        window.fixtureRig.visible = visible
+      })
+    })
+  }
+
   async function closeStage(chat, overlay) {
     const exit = once(app.process(), 'exit', { signal: AbortSignal.timeout(10_000) })
     const overlayClosed = overlay?.waitForEvent('close', { timeout: 10_000 })
@@ -168,7 +273,127 @@ async function run() {
     app = undefined
   }
 
+  async function observeBlink(page, label, afterFrame = 0) {
+    const pulse = await page.waitForFunction((frame) => {
+      const { morphChanges } = window.fixtureRig
+      const closing = morphChanges.findIndex(({ frame: current, weight }) => current > frame && weight > 0.1)
+      if (closing === -1)
+        return false
+      const opening = morphChanges.findIndex(({ weight }, index) => index > closing && Math.abs(weight) < 0.001)
+      if (opening === -1)
+        return false
+      const peak = morphChanges.slice(closing, opening).reduce((highest, sample) => sample.weight > highest.weight ? sample : highest)
+      return { closing: morphChanges[closing], peak, opening: morphChanges[opening] }
+    }, afterFrame, { polling: 50, timeout: 10_000 }).catch((error) => {
+      throw new Error(`Preset blink sem ciclo positivo → zero na ${label}.`, { cause: error })
+    })
+    try {
+      return await pulse.jsonValue()
+    }
+    finally {
+      await pulse.dispose()
+    }
+  }
+
+  async function checkPresetBlink() {
+    const chat = await open(0, true)
+    await preview(chat, blinkAvatar)
+    await chat.waitForFunction(() => window.fixtureRig.morphChanges.length > 0)
+    const previewInitial = await chat.evaluate(() => window.fixtureRig.morphChanges[0])
+    assertNear(previewInitial.weight, 0, 'Peso inicial da Prévia sem clipe')
+    const overlay = await showPresence(chat)
+    await overlay.waitForFunction(() => window.fixtureRig.morphChanges.length > 0)
+    const presenceInitial = await overlay.evaluate(() => window.fixtureRig.morphChanges[0])
+    assertNear(presenceInitial.weight, 0, 'Peso inicial da Presença sem clipe')
+    report.presetBlink = {
+      fixtureSha256: createHash('sha256').update(blinkBytes).digest('hex'),
+      clipCount: 0,
+      previewInitial,
+      presenceInitial,
+    }
+    const [previewPulse, presencePulse] = await Promise.all([
+      observeBlink(chat, 'Prévia'),
+      observeBlink(overlay, 'Presença'),
+    ])
+    Object.assign(report.presetBlink, { previewPulse, presencePulse })
+    await chat.locator('#avatar-canvas').screenshot({ path: join(root, 'preset-blink-repouso.png') })
+    const peakCapture = await chat.evaluate(() => window.fixtureRig.peakCapture)
+    if (peakCapture?.png) {
+      const { png, ...measuredFrame } = peakCapture
+      await writeFile(join(root, 'preset-blink-pico.png'), Buffer.from(png, 'base64'))
+      report.presetBlink.peakCapture = measuredFrame
+    }
+    else {
+      report.presetBlink.peakCapture = peakCapture?.error ?? 'Nenhuma captura de pico disponível.'
+    }
+
+    await observeVisibility(overlay)
+    try {
+      await fullscreen(true)
+      await overlay.waitForFunction(() => window.fixtureRig.visible === false, undefined, { polling: 50 })
+      const before = await overlay.evaluate(() => window.fixtureRig.renders)
+      await delay(blinkSilenceMs)
+      const after = await overlay.evaluate(() => window.fixtureRig.renders)
+      assert.equal(after, before, 'A Presença oculta não deve desenhar uma piscada.')
+      report.presetBlink.hidden = { before, after, durationMs: blinkSilenceMs }
+    }
+    finally {
+      await fullscreen(false)
+    }
+    const resumePulse = await observeBlink(overlay, 'Presença após retomada', report.presetBlink.hidden.after)
+    report.presetBlink.resumePulse = resumePulse
+
+    const idleFrames = await overlay.evaluate(() => window.fixtureRig.renders)
+    await delay(idleObservationMs)
+    const idleFramesAfter = await overlay.evaluate(() => window.fixtureRig.renders)
+    assert.equal(idleFramesAfter, idleFrames, 'O avatar estático desenhou quadros em repouso.')
+    report.presetBlink.idle = { before: idleFrames, after: idleFramesAfter, durationMs: idleObservationMs }
+
+    await preview(chat, staticControl)
+    await overlay.waitForFunction(count => window.fixtureRig.renders > count && window.fixtureRig.morph[0] === 0, idleFramesAfter)
+    const controlFrames = await overlay.evaluate(() => window.fixtureRig.renders)
+    await delay(blinkSilenceMs)
+    const controlFramesAfter = await overlay.evaluate(() => window.fixtureRig.renders)
+    assert.equal(controlFramesAfter, controlFrames, 'A Presença continuou animando após trocar para avatar sem preset blink.')
+    report.presetBlink.staticControl = { before: controlFrames, after: controlFramesAfter, durationMs: blinkSilenceMs }
+
+    await closeStage(chat, overlay)
+    assert.deepEqual(report.rendererErrors, [])
+  }
+
+  async function checkClipWithPresetBlink() {
+    const chat = await open()
+    await preview(chat, armClipWithBlink)
+    const overlay = await showPresence(chat)
+    const before = await sample(overlay)
+    assertArms(before)
+    await chat.evaluate(() => window.liaStagePresence.publishExpression('speaking'))
+    await overlay.waitForFunction(() => Math.abs(window.fixtureRig.morph[2] - 0.18) < 0.001)
+    const speechFrame = await overlay.evaluate(() => window.fixtureRig.renders)
+    const pulse = await observeBlink(overlay, 'Presença com clipe de braço sem trilha de morph', speechFrame)
+    assertNear(pulse.peak.mouthWeight, 0.18, 'Peso da fala durante a piscada automática')
+    assertNear(pulse.opening.mouthWeight, 0.18, 'Peso da fala após a piscada automática')
+    const after = await sample(overlay)
+    assertArms(after)
+    assert.ok(after.renders > before.renders, 'O clipe parou de renderizar durante a piscada.')
+    report.clipWithPresetBlink = {
+      fixtureSha256: createHash('sha256').update(armClipWithBlinkBytes).digest('hex'),
+      pulse,
+      rendersBefore: before.renders,
+      rendersAfter: after.renders,
+      armsAfter: after.skin,
+    }
+    await closeStage(chat, overlay)
+    assert.deepEqual(report.rendererErrors, [])
+  }
+
   try {
+    if (process.argv.includes('--preset-blink-only')) {
+      await checkPresetBlink()
+      await checkClipWithPresetBlink()
+      report.result = 'PASS'
+      return
+    }
     const chat = await open()
     await preview(chat, fixture)
     report.original = await sample(chat)
@@ -194,14 +419,19 @@ async function run() {
     assertNear(report.nextPose.skin.rightUpperArm[0], Math.cos(nextAngle), 'Movimento do braço direito')
     await canvas.screenshot({ path: join(root, 'bracos-outro-quadro.png') })
 
-    const [overlay] = await Promise.all([
-      app.waitForEvent('window', { timeout: 10_000 }), chat.getByRole('button', { name: 'Mostrar no desktop', exact: true }).click(),
-    ])
-    overlay.setDefaultTimeout(10_000)
-    overlay.on('pageerror', error => report.rendererErrors.push(error.message))
-    await chat.getByText('Avatar aberto no desktop.', { exact: true }).waitFor()
+    const overlay = await showPresence(chat)
     report.presence = await sample(overlay)
     assertArms(report.presence)
+    await delay(blinkSilenceMs)
+    const authoredWindow = await overlay.evaluate(() => ({
+      changes: window.fixtureRig.morphChanges,
+      renders: window.fixtureRig.renders,
+    }))
+    assert.ok(authoredWindow.renders > report.presence.renders, 'O clipe da Presença parou de renderizar.')
+    assert.ok(authoredWindow.changes.length > 0, 'O WebGL não recebeu o peso da piscada autoral.')
+    for (const { weight } of authoredWindow.changes)
+      assertNear(weight, blinkWeight, 'O preset não sobrepõe a piscada autoral')
+    report.authoredBlink = { ...authoredWindow, durationMs: blinkSilenceMs }
     const overlayWindow = await app.browserWindow(overlay)
     const overlayId = await overlayWindow.evaluate(window => window.id)
     await overlayWindow.dispose()
@@ -235,14 +465,7 @@ async function run() {
     report.idle = await sample(overlay)
     assertNear(report.idle.morph[1], blinkWeight, 'Piscada após expressão do Stage')
 
-    const fullscreen = value => app.evaluate(({ BrowserWindow }, next) => {
-      BrowserWindow.getAllWindows().find(window => !window.webContents.getURL().endsWith('/presence.html')).setFullScreen(next)
-    }, value)
-    await overlay.evaluate(() => {
-      window.liaStagePresence.onVisibility((visible) => {
-        window.fixtureRig.visible = visible
-      })
-    })
+    await observeVisibility(overlay)
     try {
       await fullscreen(true)
       await overlay.waitForFunction(() => window.fixtureRig.visible === false, undefined, { polling: 50 })
@@ -282,6 +505,8 @@ async function run() {
     assert.deepEqual(report.rendererErrors, [])
     report.runtime = await app.evaluate(() => ({ electron: process.versions.electron, chrome: process.versions.chrome, platform: process.platform, arch: process.arch }))
     await closeStage(withoutAvatar)
+    await checkPresetBlink()
+    await checkClipWithPresetBlink()
     report.result = 'PASS'
   }
   catch (error) {

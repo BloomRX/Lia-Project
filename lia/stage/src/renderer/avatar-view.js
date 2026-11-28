@@ -9,6 +9,9 @@ const phaseExpressions = new Map([
   ['responded', { name: 'happy', weight: 0.55 }],
   ['speaking', { name: 'aa', weight: 0.18 }],
 ])
+const frameInterval = 1000 / 24
+const blinkInterval = 4_000
+const blinkFrames = [0.5, 1, 1, 0.5, 0]
 
 function relaxStaticArms(vrm) {
   for (const side of ['left', 'right']) {
@@ -52,6 +55,24 @@ function prepareEmbeddedClip(vrm, clip) {
   return [...sharedMorphs.values()]
 }
 
+function hasIdleBlink(vrm, sharedMorphs) {
+  let hasTarget = false
+  for (const bind of vrm.expressionManager?.getExpression('blink')?.binds ?? []) {
+    if (!(bind instanceof VRMExpressionMorphTargetBind) || !(bind.weight > 0))
+      continue
+    for (const mesh of bind.primitives) {
+      const weights = mesh.morphTargetInfluences
+      if (!Number.isFinite(weights?.[bind.index]))
+        continue
+      // A glTF morph track drives the whole vector, including zero weights.
+      if (sharedMorphs.some(morph => morph.weights === weights && morph.index === bind.index))
+        return false
+      hasTarget = true
+    }
+  }
+  return hasTarget
+}
+
 export function createAvatarView(canvas) {
   const renderer = new WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'low-power' })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -77,6 +98,9 @@ export function createAvatarView(canvas) {
   let sharedMorphs = []
   let avatar
   let timer
+  let blinkTimer
+  let blinkEnabled = false
+  let blinkWeight = 0
   let previousFrame
   let expressionPhase = 'idle'
 
@@ -85,8 +109,11 @@ export function createAvatarView(canvas) {
     const expressions = avatar.expressionManager
     const original = preset ? expressions?.getValue(preset.name) : null
     const hasPreset = typeof original === 'number'
+    const originalBlink = blinkWeight > 0 ? expressions?.getValue('blink') : null
     if (hasPreset)
       expressions.setValue(preset.name, Math.max(original, preset.weight))
+    if (typeof originalBlink === 'number')
+      expressions.setValue('blink', Math.max(originalBlink, blinkWeight))
     for (const morph of sharedMorphs)
       morph.authored = morph.weights[morph.index]
     try {
@@ -102,6 +129,8 @@ export function createAvatarView(canvas) {
         weights[index] = authored
       if (hasPreset)
         expressions.setValue(preset.name, original)
+      if (typeof originalBlink === 'number')
+        expressions.setValue('blink', originalBlink)
     }
   }
 
@@ -127,11 +156,32 @@ export function createAvatarView(canvas) {
   function stopAnimation() {
     clearInterval(timer)
     timer = undefined
+    clearTimeout(blinkTimer)
+    blinkTimer = undefined
+    blinkWeight = 0
+  }
+
+  function scheduleBlink(step = 0) {
+    blinkTimer = setTimeout(() => {
+      if (!renderingEnabled || document.hidden)
+        return
+      blinkWeight = blinkFrames[step]
+      if (!mixer && canvas.clientWidth && canvas.clientHeight)
+        draw()
+      scheduleBlink((step + 1) % blinkFrames.length)
+    }, step === 0 ? blinkInterval : frameInterval)
   }
 
   function updateAnimation() {
     stopAnimation()
-    if (!renderingEnabled || !mixer || document.hidden)
+    if (!renderingEnabled || document.hidden)
+      return
+    if (blinkEnabled) {
+      if (!mixer)
+        render()
+      scheduleBlink()
+    }
+    if (!mixer)
       return
     previousFrame = performance.now()
     timer = setInterval(() => {
@@ -140,7 +190,7 @@ export function createAvatarView(canvas) {
       previousFrame = now
       mixer.update(elapsed)
       draw(elapsed)
-    }, 1000 / 24)
+    }, frameInterval)
   }
 
   function releaseModel() {
@@ -153,6 +203,7 @@ export function createAvatarView(canvas) {
       model = undefined
       mixer = undefined
       sharedMorphs = []
+      blinkEnabled = false
       avatar = undefined
     }
   }
@@ -205,6 +256,7 @@ export function createAvatarView(canvas) {
         mixer.clipAction(clip).play()
         mixer.update(0)
       }
+      blinkEnabled = hasIdleBlink(vrm, sharedMorphs)
       render()
       updateAnimation()
     },
